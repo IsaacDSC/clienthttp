@@ -1,0 +1,18 @@
+{
+  "request": {
+    "url": "http://localhost:8081/user",
+    "method": "POST",
+    "headers": {
+      "Content-Type": [
+        "application/json"
+      ]
+    },
+    "params": "http://localhost:8081/user",
+    "cookies": [],
+    "body": "{\"username\":\"isaacdsc\"}"
+  },
+  "response": {
+    "statusCode": 200,
+    "body": "{\n  \"id\": \"9c4b7651-0c9b-4349-88d2-255db93032d1\"\n}"
+  }
+}
