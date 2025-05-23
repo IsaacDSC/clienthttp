@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func (c ClientHttp) Put(ctx context.Context, input structs.PostRequest, options ...structs.NewRequestModifier) (*structs.Response, error) {
+func (c ClientHttp) Put(ctx context.Context, input structs.PutRequest, options ...structs.NewRequestModifier) (*structs.Response, error) {
 	if input.QueryParams == nil {
 		input.QueryParams = make(map[string]string)
 	}
