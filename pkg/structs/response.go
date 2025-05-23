@@ -6,6 +6,7 @@ type NewRequestModifier func(r *http.Request)
 type Response struct {
 	StatusCode int
 	Body       []byte
+	Headers    http.Header
 }
 
 func (r Response) IsStatusSuccessfully() bool {

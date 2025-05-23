@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
@@ -38,11 +39,25 @@ func NewClientHttp(baseUrl string, auditory adapter.AuditoryAdapter, correlation
 	}, nil
 }
 
-func (c ClientHttp) DoRequest(ctx context.Context, method string, endpoint string, queryParams map[string]string, body []byte, options ...structs.NewRequestModifier) (*structs.Response, error) {
+func (c ClientHttp) DoRequest(
+	ctx context.Context,
+	method string,
+	endpoint string,
+	queryParams map[string]string,
+	body []byte,
+	headers map[string]string,
+	options ...structs.NewRequestModifier,
+) (*structs.Response, error) {
 	var (
 		auditInput  *structs.Request
 		auditOutput *structs.Response
 	)
+
+	defer func() {
+		if c.auditory != nil {
+			c.auditory.Save(ctx, auditInput, auditOutput)
+		}
+	}()
 
 	endpoint = fmtEndpoint(endpoint)
 	urlReq := fmt.Sprintf("%s/%s", c.baseUrl, endpoint)
@@ -52,7 +67,7 @@ func (c ClientHttp) DoRequest(ctx context.Context, method string, endpoint strin
 		return nil, err
 	}
 
-	c.setHeaders(ctx, httpReq)
+	c.setHeaders(ctx, httpReq, headers)
 	c.setQueryParams(nil, httpReq, queryParams)
 	c.setCookies(nil, httpReq)
 
@@ -67,14 +82,12 @@ func (c ClientHttp) DoRequest(ctx context.Context, method string, endpoint strin
 		return nil, err
 	}
 
-	response, err := c.toResponse(ctx, httpRes)
+	auditOutput, err = c.toResponse(ctx, httpRes)
 	if err != nil {
 		return nil, err
 	}
 
-	auditOutput = response
-	c.auditory.Save(ctx, auditInput, auditOutput)
-	return response, nil
+	return auditOutput, nil
 }
 
 func (c ClientHttp) DoFormRequest(ctx context.Context, endpoint string, data map[string]string) (*structs.Response, error) {
@@ -97,7 +110,7 @@ func (c ClientHttp) DoFormRequest(ctx context.Context, endpoint string, data map
 	return response, nil
 }
 
-func (c ClientHttp) setHeaders(ctx context.Context, req *http.Request) {
+func (c ClientHttp) setHeaders(ctx context.Context, req *http.Request, headers map[string]string) {
 	req.Header.Set("Content-Type", c.config.contentType)
 	if c.config.authCallback != nil {
 		c.config.authCallback(req)
@@ -105,7 +118,18 @@ func (c ClientHttp) setHeaders(ctx context.Context, req *http.Request) {
 
 	if c.config.enabledCorrelationID {
 		req.Header.Set("correlation_id", c.correlation(ctx))
+	} else {
+		req.Header.Set("correlation_id", uuid.New().String())
 	}
+
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	if req.Header.Get("request_id") == "" {
+		req.Header.Set("request_id", uuid.New().String())
+	}
+
 }
 
 func (c ClientHttp) setQueryParams(ctx context.Context, req *http.Request, queryParamsMap map[string]string) {
@@ -132,6 +156,7 @@ func (c ClientHttp) toResponse(ctx context.Context, httpResponse *http.Response)
 	res = &structs.Response{
 		StatusCode: httpResponse.StatusCode,
 		Body:       body,
+		Headers:    httpResponse.Header,
 	}
 
 	if err := c.verifyResponseError(ctx, res, httpResponse); err != nil {
