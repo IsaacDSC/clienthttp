@@ -14,7 +14,7 @@ Uma biblioteca de cliente HTTP para Go que simplifica requisições HTTP com sup
 ## Instalação
 
 ```bash
-go get github.com/yourusername/clienthttp
+go get -u github.com/github.com/IsaacDSC/clienthttp
 ```
 
 ## Uso Básico
