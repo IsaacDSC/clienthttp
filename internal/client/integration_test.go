@@ -1,4 +1,4 @@
-package clienthttp
+package client
 
 import (
 	"context"
@@ -95,14 +95,14 @@ func TestClient_DefaultConfiguration_Works(t *testing.T) {
 	}
 
 	// Verify defaults are applied
-	if client.config.timeout != DefaultTimeout {
-		t.Errorf("Default timeout = %v, want %v", client.config.timeout, DefaultTimeout)
+	if client.config.Timeout != DefaultTimeout {
+		t.Errorf("Default timeout = %v, want %v", client.config.Timeout, DefaultTimeout)
 	}
-	if client.config.dialTimeout != DefaultDialTimeout {
-		t.Errorf("Default dialTimeout = %v, want %v", client.config.dialTimeout, DefaultDialTimeout)
+	if client.config.DialTimeout != DefaultDialTimeout {
+		t.Errorf("Default dialTimeout = %v, want %v", client.config.DialTimeout, DefaultDialTimeout)
 	}
-	if client.config.transport.maxIdleConns != DefaultMaxIdleConns {
-		t.Errorf("Default maxIdleConns = %v, want %v", client.config.transport.maxIdleConns, DefaultMaxIdleConns)
+	if client.config.Transport.MaxIdleConns != DefaultMaxIdleConns {
+		t.Errorf("Default maxIdleConns = %v, want %v", client.config.Transport.MaxIdleConns, DefaultMaxIdleConns)
 	}
 
 	// Make a request to verify it works
@@ -236,29 +236,29 @@ func TestNewClientHttp_WithAllOptions(t *testing.T) {
 	}
 
 	// Verify options were applied
-	if client.config.timeout != 15*time.Second {
-		t.Errorf("timeout = %v, want %v", client.config.timeout, 15*time.Second)
+	if client.config.Timeout != 15*time.Second {
+		t.Errorf("timeout = %v, want %v", client.config.Timeout, 15*time.Second)
 	}
-	if client.config.dialTimeout != 5*time.Second {
-		t.Errorf("dialTimeout = %v, want %v", client.config.dialTimeout, 5*time.Second)
+	if client.config.DialTimeout != 5*time.Second {
+		t.Errorf("dialTimeout = %v, want %v", client.config.DialTimeout, 5*time.Second)
 	}
-	if client.config.tlsHandshakeTimeout != 5*time.Second {
-		t.Errorf("tlsHandshakeTimeout = %v, want %v", client.config.tlsHandshakeTimeout, 5*time.Second)
+	if client.config.TLSHandshakeTimeout != 5*time.Second {
+		t.Errorf("tlsHandshakeTimeout = %v, want %v", client.config.TLSHandshakeTimeout, 5*time.Second)
 	}
-	if client.config.responseHeaderTimeout != 10*time.Second {
-		t.Errorf("responseHeaderTimeout = %v, want %v", client.config.responseHeaderTimeout, 10*time.Second)
+	if client.config.ResponseHeaderTimeout != 10*time.Second {
+		t.Errorf("responseHeaderTimeout = %v, want %v", client.config.ResponseHeaderTimeout, 10*time.Second)
 	}
-	if client.config.transport.maxIdleConns != 50 {
-		t.Errorf("maxIdleConns = %v, want %v", client.config.transport.maxIdleConns, 50)
+	if client.config.Transport.MaxIdleConns != 50 {
+		t.Errorf("maxIdleConns = %v, want %v", client.config.Transport.MaxIdleConns, 50)
 	}
-	if client.config.transport.maxIdleConnsPerHost != 10 {
-		t.Errorf("maxIdleConnsPerHost = %v, want %v", client.config.transport.maxIdleConnsPerHost, 10)
+	if client.config.Transport.MaxIdleConnsPerHost != 10 {
+		t.Errorf("maxIdleConnsPerHost = %v, want %v", client.config.Transport.MaxIdleConnsPerHost, 10)
 	}
-	if client.config.transport.maxConnsPerHost != 25 {
-		t.Errorf("maxConnsPerHost = %v, want %v", client.config.transport.maxConnsPerHost, 25)
+	if client.config.Transport.MaxConnsPerHost != 25 {
+		t.Errorf("maxConnsPerHost = %v, want %v", client.config.Transport.MaxConnsPerHost, 25)
 	}
-	if client.config.transport.idleConnTimeout != 60*time.Second {
-		t.Errorf("idleConnTimeout = %v, want %v", client.config.transport.idleConnTimeout, 60*time.Second)
+	if client.config.Transport.IdleConnTimeout != 60*time.Second {
+		t.Errorf("idleConnTimeout = %v, want %v", client.config.Transport.IdleConnTimeout, 60*time.Second)
 	}
 
 	// Verify client works

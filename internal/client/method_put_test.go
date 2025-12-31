@@ -1,17 +1,17 @@
-package clienthttp
+package client
 
 import (
-	"clienthttp/pkg/structs"
+	"clienthttp/internal/structs"
 	"context"
 	"net/http"
 	"reflect"
 	"testing"
 )
 
-func TestClientHttp_Post(t *testing.T) {
+func TestClientHttp_Put(t *testing.T) {
 	type args struct {
 		ctx     context.Context
-		input   structs.PostRequest
+		input   structs.PutRequest
 		options []structs.NewRequestModifier
 	}
 	tests := []struct {
@@ -22,10 +22,10 @@ func TestClientHttp_Post(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "successful_post_request",
+			name: "successful_put_request",
 			mock: func(ctx context.Context, method string, endpoint string, queryParams map[string]string, body []byte, headers map[string]string, options ...structs.NewRequestModifier) (*structs.Response, error) {
-				if method != http.MethodPost {
-					t.Errorf("Expected method %s, got %s", http.MethodPost, method)
+				if method != http.MethodPut {
+					t.Errorf("Expected method %s, got %s", http.MethodPut, method)
 				}
 				if endpoint != "/test-endpoint" {
 					t.Errorf("Expected endpoint %s, got %s", "/test-endpoint", endpoint)
@@ -35,14 +35,14 @@ func TestClientHttp_Post(t *testing.T) {
 					t.Errorf("Expected body %s, got %s", expectedBody, body)
 				}
 				return &structs.Response{
-					StatusCode: 201,
-					Body:       []byte(`{"created": true, "id": "123"}`),
+					StatusCode: 200,
+					Body:       []byte(`{"updated": true}`),
 					Headers:    http.Header{"Content-Type": []string{"application/json"}},
 				}, nil
 			},
 			args: args{
 				ctx: context.Background(),
-				input: structs.PostRequest{
+				input: structs.PutRequest{
 					BaseInput: structs.BaseInput{
 						Endpoint:    "/test-endpoint",
 						QueryParams: map[string]string{"param1": "value1"},
@@ -53,8 +53,8 @@ func TestClientHttp_Post(t *testing.T) {
 				options: []structs.NewRequestModifier{},
 			},
 			want: &structs.Response{
-				StatusCode: 201,
-				Body:       []byte(`{"created": true, "id": "123"}`),
+				StatusCode: 200,
+				Body:       []byte(`{"updated": true}`),
 				Headers:    http.Header{"Content-Type": []string{"application/json"}},
 			},
 			wantErr: false,
@@ -66,14 +66,14 @@ func TestClientHttp_Post(t *testing.T) {
 					t.Error("Expected queryParams to be initialized, got nil")
 				}
 				return &structs.Response{
-					StatusCode: 201,
+					StatusCode: 200,
 					Body:       []byte(`{}`),
 					Headers:    http.Header{},
 				}, nil
 			},
 			args: args{
 				ctx: context.Background(),
-				input: structs.PostRequest{
+				input: structs.PutRequest{
 					BaseInput: structs.BaseInput{
 						Endpoint: "/test-endpoint",
 						Headers:  map[string]string{},
@@ -83,7 +83,7 @@ func TestClientHttp_Post(t *testing.T) {
 				},
 			},
 			want: &structs.Response{
-				StatusCode: 201,
+				StatusCode: 200,
 				Body:       []byte(`{}`),
 				Headers:    http.Header{},
 			},
@@ -98,13 +98,13 @@ func TestClientHttp_Post(t *testing.T) {
 				doRequestFunc: tt.mock,
 			}
 
-			got, err := mockClient.Post(tt.args.ctx, tt.args.input, tt.args.options...)
+			got, err := mockClient.Put(tt.args.ctx, tt.args.input, tt.args.options...)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ClientHttp.Post() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ClientHttp.Put() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ClientHttp.Post() = %v, want %v", got, tt.want)
+				t.Errorf("ClientHttp.Put() = %v, want %v", got, tt.want)
 			}
 		})
 	}

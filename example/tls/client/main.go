@@ -11,8 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"clienthttp/pkg/clienthttp"
-	"clienthttp/pkg/structs"
+	"clienthttp"
 )
 
 func main() {
@@ -55,7 +54,7 @@ func main() {
 	}
 
 	// Create client
-	client, err := clienthttp.NewClientHttp(*serverURL, nil, nil, opts...)
+	client, err := clienthttp.New(*serverURL, nil, nil, opts...)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
@@ -64,8 +63,8 @@ func main() {
 
 	// Example 1: Simple GET request
 	fmt.Println("\n=== Example 1: GET / ===")
-	resp, err := client.Get(ctx, structs.GetRequest{
-		BaseInput: structs.BaseInput{Endpoint: "/"},
+	resp, err := client.Get(ctx, clienthttp.GetRequest{
+		BaseInput: clienthttp.BaseInput{Endpoint: "/"},
 	})
 	if err != nil {
 		log.Printf("Request failed: %v", err)
@@ -76,8 +75,8 @@ func main() {
 
 	// Example 2: Health check
 	fmt.Println("\n=== Example 2: GET /health ===")
-	resp, err = client.Get(ctx, structs.GetRequest{
-		BaseInput: structs.BaseInput{Endpoint: "/health"},
+	resp, err = client.Get(ctx, clienthttp.GetRequest{
+		BaseInput: clienthttp.BaseInput{Endpoint: "/health"},
 	})
 	if err != nil {
 		log.Printf("Request failed: %v", err)
@@ -88,8 +87,8 @@ func main() {
 
 	// Example 3: Echo endpoint
 	fmt.Println("\n=== Example 3: GET /echo ===")
-	resp, err = client.Get(ctx, structs.GetRequest{
-		BaseInput: structs.BaseInput{Endpoint: "/echo"},
+	resp, err = client.Get(ctx, clienthttp.GetRequest{
+		BaseInput: clienthttp.BaseInput{Endpoint: "/echo"},
 	})
 	if err != nil {
 		log.Printf("Request failed: %v", err)
@@ -100,4 +99,3 @@ func main() {
 
 	fmt.Println("\n=== Done ===")
 }
-

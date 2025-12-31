@@ -1,4 +1,4 @@
-package clienthttp
+package client
 
 import (
 	"crypto/rand"
@@ -82,8 +82,8 @@ func TestWithTimeout_SetsValue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := newConfig(WithTimeout(tt.timeout))
-			if cfg.timeout != tt.expected {
-				t.Errorf("WithTimeout() = %v, want %v", cfg.timeout, tt.expected)
+			if cfg.Timeout != tt.expected {
+				t.Errorf("WithTimeout() = %v, want %v", cfg.Timeout, tt.expected)
 			}
 		})
 	}
@@ -110,8 +110,8 @@ func TestWithDialTimeout_SetsValue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := newConfig(WithDialTimeout(tt.timeout))
-			if cfg.dialTimeout != tt.expected {
-				t.Errorf("WithDialTimeout() = %v, want %v", cfg.dialTimeout, tt.expected)
+			if cfg.DialTimeout != tt.expected {
+				t.Errorf("WithDialTimeout() = %v, want %v", cfg.DialTimeout, tt.expected)
 			}
 		})
 	}
@@ -121,8 +121,8 @@ func TestWithTLSHandshakeTimeout_SetsValue(t *testing.T) {
 	timeout := 15 * time.Second
 	cfg := newConfig(WithTLSHandshakeTimeout(timeout))
 
-	if cfg.tlsHandshakeTimeout != timeout {
-		t.Errorf("WithTLSHandshakeTimeout() = %v, want %v", cfg.tlsHandshakeTimeout, timeout)
+	if cfg.TLSHandshakeTimeout != timeout {
+		t.Errorf("WithTLSHandshakeTimeout() = %v, want %v", cfg.TLSHandshakeTimeout, timeout)
 	}
 }
 
@@ -130,8 +130,8 @@ func TestWithResponseHeaderTimeout_SetsValue(t *testing.T) {
 	timeout := 20 * time.Second
 	cfg := newConfig(WithResponseHeaderTimeout(timeout))
 
-	if cfg.responseHeaderTimeout != timeout {
-		t.Errorf("WithResponseHeaderTimeout() = %v, want %v", cfg.responseHeaderTimeout, timeout)
+	if cfg.ResponseHeaderTimeout != timeout {
+		t.Errorf("WithResponseHeaderTimeout() = %v, want %v", cfg.ResponseHeaderTimeout, timeout)
 	}
 }
 
@@ -145,22 +145,22 @@ func TestTimeout_DefaultValues(t *testing.T) {
 	}{
 		{
 			name:     "default timeout",
-			got:      cfg.timeout,
+			got:      cfg.Timeout,
 			expected: DefaultTimeout,
 		},
 		{
 			name:     "default dial timeout",
-			got:      cfg.dialTimeout,
+			got:      cfg.DialTimeout,
 			expected: DefaultDialTimeout,
 		},
 		{
 			name:     "default TLS handshake timeout",
-			got:      cfg.tlsHandshakeTimeout,
+			got:      cfg.TLSHandshakeTimeout,
 			expected: DefaultTLSHandshakeTimeout,
 		},
 		{
 			name:     "default response header timeout",
-			got:      cfg.responseHeaderTimeout,
+			got:      cfg.ResponseHeaderTimeout,
 			expected: DefaultResponseHeaderTimeout,
 		},
 	}
@@ -204,8 +204,8 @@ func TestWithMaxIdleConns_SetsValue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := newConfig(WithMaxIdleConns(tt.value))
-			if cfg.transport.maxIdleConns != tt.expected {
-				t.Errorf("WithMaxIdleConns() = %v, want %v", cfg.transport.maxIdleConns, tt.expected)
+			if cfg.Transport.MaxIdleConns != tt.expected {
+				t.Errorf("WithMaxIdleConns() = %v, want %v", cfg.Transport.MaxIdleConns, tt.expected)
 			}
 		})
 	}
@@ -215,8 +215,8 @@ func TestWithMaxIdleConnsPerHost_SetsValue(t *testing.T) {
 	value := 20
 	cfg := newConfig(WithMaxIdleConnsPerHost(value))
 
-	if cfg.transport.maxIdleConnsPerHost != value {
-		t.Errorf("WithMaxIdleConnsPerHost() = %v, want %v", cfg.transport.maxIdleConnsPerHost, value)
+	if cfg.Transport.MaxIdleConnsPerHost != value {
+		t.Errorf("WithMaxIdleConnsPerHost() = %v, want %v", cfg.Transport.MaxIdleConnsPerHost, value)
 	}
 }
 
@@ -241,8 +241,8 @@ func TestWithMaxConnsPerHost_SetsValue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := newConfig(WithMaxConnsPerHost(tt.value))
-			if cfg.transport.maxConnsPerHost != tt.expected {
-				t.Errorf("WithMaxConnsPerHost() = %v, want %v", cfg.transport.maxConnsPerHost, tt.expected)
+			if cfg.Transport.MaxConnsPerHost != tt.expected {
+				t.Errorf("WithMaxConnsPerHost() = %v, want %v", cfg.Transport.MaxConnsPerHost, tt.expected)
 			}
 		})
 	}
@@ -252,8 +252,8 @@ func TestWithIdleConnTimeout_SetsValue(t *testing.T) {
 	timeout := 60 * time.Second
 	cfg := newConfig(WithIdleConnTimeout(timeout))
 
-	if cfg.transport.idleConnTimeout != timeout {
-		t.Errorf("WithIdleConnTimeout() = %v, want %v", cfg.transport.idleConnTimeout, timeout)
+	if cfg.Transport.IdleConnTimeout != timeout {
+		t.Errorf("WithIdleConnTimeout() = %v, want %v", cfg.Transport.IdleConnTimeout, timeout)
 	}
 }
 
@@ -267,22 +267,22 @@ func TestConnectionPool_DefaultValues(t *testing.T) {
 	}{
 		{
 			name:     "default max idle conns",
-			got:      cfg.transport.maxIdleConns,
+			got:      cfg.Transport.MaxIdleConns,
 			expected: DefaultMaxIdleConns,
 		},
 		{
 			name:     "default max idle conns per host",
-			got:      cfg.transport.maxIdleConnsPerHost,
+			got:      cfg.Transport.MaxIdleConnsPerHost,
 			expected: DefaultMaxIdleConnsPerHost,
 		},
 		{
 			name:     "default max conns per host",
-			got:      cfg.transport.maxConnsPerHost,
+			got:      cfg.Transport.MaxConnsPerHost,
 			expected: DefaultMaxConnsPerHost,
 		},
 		{
 			name:     "default idle conn timeout",
-			got:      cfg.transport.idleConnTimeout,
+			got:      cfg.Transport.IdleConnTimeout,
 			expected: DefaultIdleConnTimeout,
 		},
 	}
@@ -313,17 +313,17 @@ func TestMultipleOptions_AppliedCorrectly(t *testing.T) {
 		WithMaxConnsPerHost(maxConnsPerHost),
 	)
 
-	if cfg.timeout != timeout {
-		t.Errorf("timeout = %v, want %v", cfg.timeout, timeout)
+	if cfg.Timeout != timeout {
+		t.Errorf("timeout = %v, want %v", cfg.Timeout, timeout)
 	}
-	if cfg.dialTimeout != dialTimeout {
-		t.Errorf("dialTimeout = %v, want %v", cfg.dialTimeout, dialTimeout)
+	if cfg.DialTimeout != dialTimeout {
+		t.Errorf("dialTimeout = %v, want %v", cfg.DialTimeout, dialTimeout)
 	}
-	if cfg.transport.maxIdleConns != maxIdleConns {
-		t.Errorf("maxIdleConns = %v, want %v", cfg.transport.maxIdleConns, maxIdleConns)
+	if cfg.Transport.MaxIdleConns != maxIdleConns {
+		t.Errorf("maxIdleConns = %v, want %v", cfg.Transport.MaxIdleConns, maxIdleConns)
 	}
-	if cfg.transport.maxConnsPerHost != maxConnsPerHost {
-		t.Errorf("maxConnsPerHost = %v, want %v", cfg.transport.maxConnsPerHost, maxConnsPerHost)
+	if cfg.Transport.MaxConnsPerHost != maxConnsPerHost {
+		t.Errorf("maxConnsPerHost = %v, want %v", cfg.Transport.MaxConnsPerHost, maxConnsPerHost)
 	}
 }
 
@@ -378,17 +378,17 @@ func TestBuildTransport_ReturnsConfiguredTransport(t *testing.T) {
 func TestTLS_DefaultValues(t *testing.T) {
 	cfg := newConfig()
 
-	if cfg.tls.enabled {
+	if cfg.TLS.Enabled {
 		t.Error("TLS should be disabled by default")
 	}
-	if cfg.tls.insecureSkipVerify {
+	if cfg.TLS.InsecureSkipVerify {
 		t.Error("insecureSkipVerify should be false by default")
 	}
-	if cfg.tls.minVersion != tls.VersionTLS12 {
-		t.Errorf("minVersion = %v, want %v (TLS 1.2)", cfg.tls.minVersion, tls.VersionTLS12)
+	if cfg.TLS.MinVersion != tls.VersionTLS12 {
+		t.Errorf("minVersion = %v, want %v (TLS 1.2)", cfg.TLS.MinVersion, tls.VersionTLS12)
 	}
-	if cfg.tls.maxVersion != 0 {
-		t.Errorf("maxVersion = %v, want 0 (no limit)", cfg.tls.maxVersion)
+	if cfg.TLS.MaxVersion != 0 {
+		t.Errorf("maxVersion = %v, want 0 (no limit)", cfg.TLS.MaxVersion)
 	}
 }
 
@@ -400,10 +400,10 @@ func TestWithTLSConfig_SetsCustomConfig(t *testing.T) {
 
 	cfg := newConfig(WithTLSConfig(customConfig))
 
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled when custom config is set")
 	}
-	if cfg.tls.customConfig != customConfig {
+	if cfg.TLS.CustomConfig != customConfig {
 		t.Error("customConfig should be set to provided config")
 	}
 }
@@ -411,10 +411,10 @@ func TestWithTLSConfig_SetsCustomConfig(t *testing.T) {
 func TestWithInsecureSkipVerify_EnablesOption(t *testing.T) {
 	cfg := newConfig(WithInsecureSkipVerify())
 
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled when InsecureSkipVerify is set")
 	}
-	if !cfg.tls.insecureSkipVerify {
+	if !cfg.TLS.InsecureSkipVerify {
 		t.Error("insecureSkipVerify should be true")
 	}
 }
@@ -434,11 +434,11 @@ func TestWithTLSMinVersion_SetsValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := newConfig(WithTLSMinVersion(tt.version))
 
-			if !cfg.tls.enabled {
+			if !cfg.TLS.Enabled {
 				t.Error("TLS should be enabled when MinVersion is set")
 			}
-			if cfg.tls.minVersion != tt.version {
-				t.Errorf("minVersion = %v, want %v", cfg.tls.minVersion, tt.version)
+			if cfg.TLS.MinVersion != tt.version {
+				t.Errorf("minVersion = %v, want %v", cfg.TLS.MinVersion, tt.version)
 			}
 		})
 	}
@@ -457,11 +457,11 @@ func TestWithTLSMaxVersion_SetsValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := newConfig(WithTLSMaxVersion(tt.version))
 
-			if !cfg.tls.enabled {
+			if !cfg.TLS.Enabled {
 				t.Error("TLS should be enabled when MaxVersion is set")
 			}
-			if cfg.tls.maxVersion != tt.version {
-				t.Errorf("maxVersion = %v, want %v", cfg.tls.maxVersion, tt.version)
+			if cfg.TLS.MaxVersion != tt.version {
+				t.Errorf("maxVersion = %v, want %v", cfg.TLS.MaxVersion, tt.version)
 			}
 		})
 	}
@@ -482,10 +482,10 @@ SIb3DQEBCwUAA0EAqVrPvOLOb2qPdOLQ8GOQB8gF3rrP8FqP5dYf0LvfK1qLwryO
 
 	cfg := newConfig(WithRootCAFromPEM(caPEM))
 
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled when RootCA is set")
 	}
-	if cfg.tls.rootCAs == nil {
+	if cfg.TLS.RootCAs == nil {
 		t.Error("rootCAs should not be nil")
 	}
 }
@@ -494,11 +494,11 @@ func TestWithRootCA_NonExistentFile(t *testing.T) {
 	cfg := newConfig(WithRootCA("/nonexistent/path/ca.pem"))
 
 	// Should still enable TLS even if file doesn't exist
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled even when file doesn't exist")
 	}
 	// rootCAs should be nil since file doesn't exist
-	if cfg.tls.rootCAs != nil {
+	if cfg.TLS.RootCAs != nil {
 		t.Error("rootCAs should be nil when file doesn't exist")
 	}
 }
@@ -524,10 +524,10 @@ SIb3DQEBCwUAA0EAqVrPvOLOb2qPdOLQ8GOQB8gF3rrP8FqP5dYf0LvfK1qLwryO
 
 	cfg := newConfig(WithRootCA(caFile))
 
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled when RootCA file is valid")
 	}
-	if cfg.tls.rootCAs == nil {
+	if cfg.TLS.RootCAs == nil {
 		t.Error("rootCAs should not be nil when file is valid")
 	}
 }
@@ -538,11 +538,11 @@ func TestWithClientCertificateFromPEM_AddsCertificate(t *testing.T) {
 
 	cfg := newConfig(WithClientCertificateFromPEM(certPEM, keyPEM))
 
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled when client certificate is set")
 	}
-	if len(cfg.tls.certificates) != 1 {
-		t.Errorf("certificates length = %d, want 1", len(cfg.tls.certificates))
+	if len(cfg.TLS.Certificates) != 1 {
+		t.Errorf("certificates length = %d, want 1", len(cfg.TLS.Certificates))
 	}
 }
 
@@ -553,12 +553,12 @@ func TestWithClientCertificateFromPEM_InvalidCert(t *testing.T) {
 	cfg := newConfig(WithClientCertificateFromPEM(invalidCertPEM, invalidKeyPEM))
 
 	// Should still enable TLS even with invalid cert
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled even with invalid certificate")
 	}
 	// But certificates should be empty
-	if len(cfg.tls.certificates) != 0 {
-		t.Errorf("certificates length = %d, want 0", len(cfg.tls.certificates))
+	if len(cfg.TLS.Certificates) != 0 {
+		t.Errorf("certificates length = %d, want 0", len(cfg.TLS.Certificates))
 	}
 }
 
@@ -566,12 +566,12 @@ func TestWithClientCertificate_NonExistentFiles(t *testing.T) {
 	cfg := newConfig(WithClientCertificate("/nonexistent/cert.pem", "/nonexistent/key.pem"))
 
 	// Should still enable TLS even if files don't exist
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled even when files don't exist")
 	}
 	// But certificates should be empty
-	if len(cfg.tls.certificates) != 0 {
-		t.Errorf("certificates length = %d, want 0", len(cfg.tls.certificates))
+	if len(cfg.TLS.Certificates) != 0 {
+		t.Errorf("certificates length = %d, want 0", len(cfg.TLS.Certificates))
 	}
 }
 
@@ -592,11 +592,11 @@ func TestWithClientCertificate_ValidFiles(t *testing.T) {
 
 	cfg := newConfig(WithClientCertificate(certFile, keyFile))
 
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled when certificate files are valid")
 	}
-	if len(cfg.tls.certificates) != 1 {
-		t.Errorf("certificates length = %d, want 1", len(cfg.tls.certificates))
+	if len(cfg.TLS.Certificates) != 1 {
+		t.Errorf("certificates length = %d, want 1", len(cfg.TLS.Certificates))
 	}
 }
 
@@ -672,16 +672,16 @@ SIb3DQEBCwUAA0EAqVrPvOLOb2qPdOLQ8GOQB8gF3rrP8FqP5dYf0LvfK1qLwryO
 		WithRootCAFromPEM(caPEM),
 	)
 
-	if !cfg.tls.enabled {
+	if !cfg.TLS.Enabled {
 		t.Error("TLS should be enabled")
 	}
-	if cfg.tls.minVersion != tls.VersionTLS12 {
-		t.Errorf("minVersion = %v, want %v", cfg.tls.minVersion, tls.VersionTLS12)
+	if cfg.TLS.MinVersion != tls.VersionTLS12 {
+		t.Errorf("minVersion = %v, want %v", cfg.TLS.MinVersion, tls.VersionTLS12)
 	}
-	if cfg.tls.maxVersion != tls.VersionTLS13 {
-		t.Errorf("maxVersion = %v, want %v", cfg.tls.maxVersion, tls.VersionTLS13)
+	if cfg.TLS.MaxVersion != tls.VersionTLS13 {
+		t.Errorf("maxVersion = %v, want %v", cfg.TLS.MaxVersion, tls.VersionTLS13)
 	}
-	if cfg.tls.rootCAs == nil {
+	if cfg.TLS.RootCAs == nil {
 		t.Error("rootCAs should not be nil")
 	}
 }

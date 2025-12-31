@@ -1,9 +1,9 @@
-package clienthttp
+package client
 
 import (
 	"bytes"
-	"clienthttp/pkg/adapter"
-	"clienthttp/pkg/structs"
+	"clienthttp/internal/adapter"
+	"clienthttp/internal/structs"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -20,7 +20,7 @@ import (
 type ClientHttp struct {
 	httpClient *http.Client
 	baseUrl    string
-	config     config
+	config     Config
 
 	auditory    adapter.AuditoryAdapter
 	correlation adapter.CorrelationIDAdapter
@@ -36,7 +36,7 @@ func NewClientHttp(baseUrl string, auditory adapter.AuditoryAdapter, correlation
 	baseUrl = fmtBaseUrl(baseUrl)
 
 	httpClient := &http.Client{
-		Timeout:   cfg.timeout,
+		Timeout:   cfg.Timeout,
 		Transport: cfg.buildTransport(),
 	}
 
@@ -50,23 +50,23 @@ func NewClientHttp(baseUrl string, auditory adapter.AuditoryAdapter, correlation
 }
 
 // buildTransport creates an http.Transport with the configured timeout, connection pool, and TLS settings.
-func (c *config) buildTransport() *http.Transport {
+func (c *Config) buildTransport() *http.Transport {
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
-			Timeout:   c.dialTimeout,
+			Timeout:   c.DialTimeout,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
-		TLSHandshakeTimeout:   c.tlsHandshakeTimeout,
-		ResponseHeaderTimeout: c.responseHeaderTimeout,
-		MaxIdleConns:          c.transport.maxIdleConns,
-		MaxIdleConnsPerHost:   c.transport.maxIdleConnsPerHost,
-		MaxConnsPerHost:       c.transport.maxConnsPerHost,
-		IdleConnTimeout:       c.transport.idleConnTimeout,
+		TLSHandshakeTimeout:   c.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: c.ResponseHeaderTimeout,
+		MaxIdleConns:          c.Transport.MaxIdleConns,
+		MaxIdleConnsPerHost:   c.Transport.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       c.Transport.MaxConnsPerHost,
+		IdleConnTimeout:       c.Transport.IdleConnTimeout,
 		ForceAttemptHTTP2:     true,
 	}
 
 	// Apply TLS configuration if enabled
-	if c.tls.enabled {
+	if c.TLS.Enabled {
 		transport.TLSClientConfig = c.buildTLSConfig()
 	}
 
@@ -74,19 +74,19 @@ func (c *config) buildTransport() *http.Transport {
 }
 
 // buildTLSConfig creates a tls.Config based on the configured TLS options.
-func (c *config) buildTLSConfig() *tls.Config {
+func (c *Config) buildTLSConfig() *tls.Config {
 	// If a custom TLS config was provided, use it directly
-	if c.tls.customConfig != nil {
-		return c.tls.customConfig
+	if c.TLS.CustomConfig != nil {
+		return c.TLS.CustomConfig
 	}
 
 	// Build TLS config from individual options
 	return &tls.Config{
-		InsecureSkipVerify: c.tls.insecureSkipVerify,
-		RootCAs:            c.tls.rootCAs,
-		Certificates:       c.tls.certificates,
-		MinVersion:         c.tls.minVersion,
-		MaxVersion:         c.tls.maxVersion,
+		InsecureSkipVerify: c.TLS.InsecureSkipVerify,
+		RootCAs:            c.TLS.RootCAs,
+		Certificates:       c.TLS.Certificates,
+		MinVersion:         c.TLS.MinVersion,
+		MaxVersion:         c.TLS.MaxVersion,
 	}
 }
 
@@ -162,12 +162,12 @@ func (c ClientHttp) DoFormRequest(ctx context.Context, endpoint string, data map
 }
 
 func (c ClientHttp) setHeaders(ctx context.Context, req *http.Request, headers map[string]string) {
-	req.Header.Set("Content-Type", c.config.contentType)
-	if c.config.authCallback != nil {
-		c.config.authCallback(req)
+	req.Header.Set("Content-Type", c.config.ContentType)
+	if c.config.AuthCallback != nil {
+		c.config.AuthCallback(req)
 	}
 
-	if c.config.enabledCorrelationID {
+	if c.config.EnabledCorrelationID {
 		req.Header.Set("correlation_id", c.correlation(ctx))
 	} else {
 		req.Header.Set("correlation_id", uuid.New().String())
@@ -193,8 +193,8 @@ func (c ClientHttp) setQueryParams(ctx context.Context, req *http.Request, query
 }
 
 func (c ClientHttp) setCookies(ctx context.Context, req *http.Request) {
-	for i := range c.config.cookies {
-		req.AddCookie(&c.config.cookies[i])
+	for i := range c.config.Cookies {
+		req.AddCookie(&c.config.Cookies[i])
 	}
 }
 

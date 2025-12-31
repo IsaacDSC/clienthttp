@@ -1,17 +1,17 @@
-package clienthttp
+package client
 
 import (
-	"clienthttp/pkg/structs"
+	"clienthttp/internal/structs"
 	"context"
 	"net/http"
 	"reflect"
 	"testing"
 )
 
-func TestClientHttp_Del(t *testing.T) {
+func TestClientHttp_Post(t *testing.T) {
 	type args struct {
 		ctx     context.Context
-		input   structs.DelRequest
+		input   structs.PostRequest
 		options []structs.NewRequestModifier
 	}
 	tests := []struct {
@@ -22,37 +22,39 @@ func TestClientHttp_Del(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "successful_delete_request",
+			name: "successful_post_request",
 			mock: func(ctx context.Context, method string, endpoint string, queryParams map[string]string, body []byte, headers map[string]string, options ...structs.NewRequestModifier) (*structs.Response, error) {
-				if method != http.MethodDelete {
-					t.Errorf("Expected method %s, got %s", http.MethodDelete, method)
+				if method != http.MethodPost {
+					t.Errorf("Expected method %s, got %s", http.MethodPost, method)
 				}
 				if endpoint != "/test-endpoint" {
 					t.Errorf("Expected endpoint %s, got %s", "/test-endpoint", endpoint)
 				}
-				if body != nil {
-					t.Errorf("Expected body to be nil for DELETE request")
+				expectedBody := []byte(`{"key":"value"}`)
+				if !reflect.DeepEqual(body, expectedBody) {
+					t.Errorf("Expected body %s, got %s", expectedBody, body)
 				}
 				return &structs.Response{
-					StatusCode: 200,
-					Body:       []byte(`{"success": true}`),
+					StatusCode: 201,
+					Body:       []byte(`{"created": true, "id": "123"}`),
 					Headers:    http.Header{"Content-Type": []string{"application/json"}},
 				}, nil
 			},
 			args: args{
 				ctx: context.Background(),
-				input: structs.DelRequest{
+				input: structs.PostRequest{
 					BaseInput: structs.BaseInput{
 						Endpoint:    "/test-endpoint",
 						QueryParams: map[string]string{"param1": "value1"},
-						Headers:     map[string]string{"Authorization": "Bearer token"},
+						Headers:     map[string]string{"Content-Type": "application/json"},
 					},
+					Body: []byte(`{"key":"value"}`),
 				},
 				options: []structs.NewRequestModifier{},
 			},
 			want: &structs.Response{
-				StatusCode: 200,
-				Body:       []byte(`{"success": true}`),
+				StatusCode: 201,
+				Body:       []byte(`{"created": true, "id": "123"}`),
 				Headers:    http.Header{"Content-Type": []string{"application/json"}},
 			},
 			wantErr: false,
@@ -64,23 +66,24 @@ func TestClientHttp_Del(t *testing.T) {
 					t.Error("Expected queryParams to be initialized, got nil")
 				}
 				return &structs.Response{
-					StatusCode: 200,
+					StatusCode: 201,
 					Body:       []byte(`{}`),
 					Headers:    http.Header{},
 				}, nil
 			},
 			args: args{
 				ctx: context.Background(),
-				input: structs.DelRequest{
+				input: structs.PostRequest{
 					BaseInput: structs.BaseInput{
 						Endpoint: "/test-endpoint",
 						Headers:  map[string]string{},
 						// QueryParams intentionally left nil
 					},
+					Body: []byte(`{}`),
 				},
 			},
 			want: &structs.Response{
-				StatusCode: 200,
+				StatusCode: 201,
 				Body:       []byte(`{}`),
 				Headers:    http.Header{},
 			},
@@ -95,13 +98,13 @@ func TestClientHttp_Del(t *testing.T) {
 				doRequestFunc: tt.mock,
 			}
 
-			got, err := mockClient.Del(tt.args.ctx, tt.args.input, tt.args.options...)
+			got, err := mockClient.Post(tt.args.ctx, tt.args.input, tt.args.options...)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ClientHttp.Del() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ClientHttp.Post() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ClientHttp.Del() = %v, want %v", got, tt.want)
+				t.Errorf("ClientHttp.Post() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"clienthttp/pkg/structs"
+	"clienthttp"
 	"context"
 	"encoding/json"
 	"log"
@@ -29,7 +29,7 @@ type ResponseAudit struct {
 	Body       string `json:"body"`
 }
 
-func (as AuditoryService) Save(ctx context.Context, request *structs.Request, response *structs.Response) {
+func (as AuditoryService) Save(ctx context.Context, request *clienthttp.Request, response *clienthttp.Response) {
 	req := RequestAudit{
 		Url:     request.Url,
 		Method:  request.Method,

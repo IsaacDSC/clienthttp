@@ -1,17 +1,17 @@
-package clienthttp
+package client
 
 import (
-	"clienthttp/pkg/structs"
+	"clienthttp/internal/structs"
 	"context"
 	"net/http"
 	"reflect"
 	"testing"
 )
 
-func TestClientHttp_Put(t *testing.T) {
+func TestClientHttp_Del(t *testing.T) {
 	type args struct {
 		ctx     context.Context
-		input   structs.PutRequest
+		input   structs.DelRequest
 		options []structs.NewRequestModifier
 	}
 	tests := []struct {
@@ -22,39 +22,37 @@ func TestClientHttp_Put(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "successful_put_request",
+			name: "successful_delete_request",
 			mock: func(ctx context.Context, method string, endpoint string, queryParams map[string]string, body []byte, headers map[string]string, options ...structs.NewRequestModifier) (*structs.Response, error) {
-				if method != http.MethodPut {
-					t.Errorf("Expected method %s, got %s", http.MethodPut, method)
+				if method != http.MethodDelete {
+					t.Errorf("Expected method %s, got %s", http.MethodDelete, method)
 				}
 				if endpoint != "/test-endpoint" {
 					t.Errorf("Expected endpoint %s, got %s", "/test-endpoint", endpoint)
 				}
-				expectedBody := []byte(`{"key":"value"}`)
-				if !reflect.DeepEqual(body, expectedBody) {
-					t.Errorf("Expected body %s, got %s", expectedBody, body)
+				if body != nil {
+					t.Errorf("Expected body to be nil for DELETE request")
 				}
 				return &structs.Response{
 					StatusCode: 200,
-					Body:       []byte(`{"updated": true}`),
+					Body:       []byte(`{"success": true}`),
 					Headers:    http.Header{"Content-Type": []string{"application/json"}},
 				}, nil
 			},
 			args: args{
 				ctx: context.Background(),
-				input: structs.PutRequest{
+				input: structs.DelRequest{
 					BaseInput: structs.BaseInput{
 						Endpoint:    "/test-endpoint",
 						QueryParams: map[string]string{"param1": "value1"},
-						Headers:     map[string]string{"Content-Type": "application/json"},
+						Headers:     map[string]string{"Authorization": "Bearer token"},
 					},
-					Body: []byte(`{"key":"value"}`),
 				},
 				options: []structs.NewRequestModifier{},
 			},
 			want: &structs.Response{
 				StatusCode: 200,
-				Body:       []byte(`{"updated": true}`),
+				Body:       []byte(`{"success": true}`),
 				Headers:    http.Header{"Content-Type": []string{"application/json"}},
 			},
 			wantErr: false,
@@ -73,13 +71,12 @@ func TestClientHttp_Put(t *testing.T) {
 			},
 			args: args{
 				ctx: context.Background(),
-				input: structs.PutRequest{
+				input: structs.DelRequest{
 					BaseInput: structs.BaseInput{
 						Endpoint: "/test-endpoint",
 						Headers:  map[string]string{},
 						// QueryParams intentionally left nil
 					},
-					Body: []byte(`{}`),
 				},
 			},
 			want: &structs.Response{
@@ -98,13 +95,13 @@ func TestClientHttp_Put(t *testing.T) {
 				doRequestFunc: tt.mock,
 			}
 
-			got, err := mockClient.Put(tt.args.ctx, tt.args.input, tt.args.options...)
+			got, err := mockClient.Del(tt.args.ctx, tt.args.input, tt.args.options...)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ClientHttp.Put() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ClientHttp.Del() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ClientHttp.Put() = %v, want %v", got, tt.want)
+				t.Errorf("ClientHttp.Del() = %v, want %v", got, tt.want)
 			}
 		})
 	}

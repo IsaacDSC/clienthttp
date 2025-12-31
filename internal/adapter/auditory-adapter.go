@@ -1,7 +1,7 @@
 package adapter
 
 import (
-	"clienthttp/pkg/structs"
+	"clienthttp/internal/structs"
 	"context"
 )
 

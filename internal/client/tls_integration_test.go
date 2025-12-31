@@ -1,7 +1,7 @@
-package clienthttp
+package client
 
 import (
-	"clienthttp/pkg/structs"
+	"clienthttp/internal/structs"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"

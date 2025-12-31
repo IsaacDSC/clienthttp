@@ -1,15 +1,15 @@
 package main
 
 import (
-	"clienthttp/pkg/clienthttp"
-	"clienthttp/pkg/structs"
+	"clienthttp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"log"
 	"os"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func GetCorrelation(ctx context.Context) string {
@@ -33,7 +33,7 @@ func main() {
 		log.Fatal("AuditoryService não pôde ser criado")
 	}
 
-	client, err := clienthttp.NewClientHttp(baseURL, auditoryService, GetCorrelation)
+	client, err := clienthttp.New(baseURL, auditoryService, GetCorrelation)
 	if err != nil {
 		log.Fatalf("Erro ao criar cliente HTTP: %v", err)
 	}
@@ -63,8 +63,8 @@ func main() {
 
 	fmt.Println("Enviando requisição POST...")
 	// Usando o endpoint /post do httpbin.org para testar
-	res, err := client.Post(ctx, structs.PostRequest{
-		BaseInput: structs.BaseInput{
+	res, err := client.Post(ctx, clienthttp.PostRequest{
+		BaseInput: clienthttp.BaseInput{
 			Endpoint:    "/post",
 			QueryParams: queryParams,
 			Headers:     headers,

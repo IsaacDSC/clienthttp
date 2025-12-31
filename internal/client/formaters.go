@@ -1,4 +1,4 @@
-package clienthttp
+package client
 
 import "strings"
 
