@@ -7,10 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type ClientHttp struct {
@@ -30,13 +33,36 @@ func NewClientHttp(baseUrl string, auditory adapter.AuditoryAdapter, correlation
 	}
 
 	baseUrl = fmtBaseUrl(baseUrl)
+
+	httpClient := &http.Client{
+		Timeout:   cfg.timeout,
+		Transport: cfg.buildTransport(),
+	}
+
 	return &ClientHttp{
-		httpClient:  &http.Client{},
+		httpClient:  httpClient,
 		baseUrl:     baseUrl,
 		config:      *cfg,
 		auditory:    auditory,
 		correlation: correlation,
 	}, nil
+}
+
+// buildTransport creates an http.Transport with the configured timeout and connection pool settings.
+func (c *config) buildTransport() *http.Transport {
+	return &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   c.dialTimeout,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   c.tlsHandshakeTimeout,
+		ResponseHeaderTimeout: c.responseHeaderTimeout,
+		MaxIdleConns:          c.transport.maxIdleConns,
+		MaxIdleConnsPerHost:   c.transport.maxIdleConnsPerHost,
+		MaxConnsPerHost:       c.transport.maxConnsPerHost,
+		IdleConnTimeout:       c.transport.idleConnTimeout,
+		ForceAttemptHTTP2:     true,
+	}
 }
 
 func (c ClientHttp) DoRequest(
@@ -68,8 +94,8 @@ func (c ClientHttp) DoRequest(
 	}
 
 	c.setHeaders(ctx, httpReq, headers)
-	c.setQueryParams(nil, httpReq, queryParams)
-	c.setCookies(nil, httpReq)
+	c.setQueryParams(ctx, httpReq, queryParams)
+	c.setCookies(ctx, httpReq)
 
 	auditInput = structs.NewRequest(urlReq, method, httpReq.Header, httpReq.URL.String(), httpReq.Cookies(), body)
 
