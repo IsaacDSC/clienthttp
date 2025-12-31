@@ -1,236 +1,288 @@
 package clienthttp
 
 import (
-	"clienthttp/internal/adapter"
-	"clienthttp/internal/client"
-	"clienthttp/internal/structs"
+	"bytes"
 	"context"
+	"crypto/tls"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
-// Client is the interface for making HTTP requests.
-type Client interface {
-	// Get performs an HTTP GET request.
-	Get(ctx context.Context, input GetRequest, opts ...RequestModifier) (*Response, error)
-
-	// Post performs an HTTP POST request.
-	Post(ctx context.Context, input PostRequest, opts ...RequestModifier) (*Response, error)
-
-	// Put performs an HTTP PUT request.
-	Put(ctx context.Context, input PutRequest, opts ...RequestModifier) (*Response, error)
-
-	// Patch performs an HTTP PATCH request.
-	Patch(ctx context.Context, input PatchRequest, opts ...RequestModifier) (*Response, error)
-
-	// Del performs an HTTP DELETE request.
-	Del(ctx context.Context, input DelRequest, opts ...RequestModifier) (*Response, error)
-
-	// DoRequest performs a custom HTTP request with the given method.
-	DoRequest(ctx context.Context, method, endpoint string, queryParams map[string]string, body []byte, headers map[string]string, opts ...RequestModifier) (*Response, error)
-
-	// DoFormRequest performs an HTTP POST request with form data.
-	DoFormRequest(ctx context.Context, endpoint string, data map[string]string) (*Response, error)
-}
-
-// clientWrapper wraps the internal client to implement the public Client interface.
-type clientWrapper struct {
-	internal *client.ClientHttp
+// Client is an HTTP client with configurable options.
+type Client struct {
+	httpClient *http.Client
+	baseURL    string
+	config     *config
 }
 
 // New creates a new HTTP client with the given base URL and options.
-// Returns an error if the base URL is invalid.
-func New(baseUrl string, auditory AuditoryAdapter, correlation CorrelationIDAdapter, opts ...Option) (Client, error) {
-	// Convert public options to internal options
-	internalOpts := make([]client.Option, len(opts))
-	for i, opt := range opts {
-		internalOpts[i] = client.Option(opt)
+func New(baseURL string, opts ...Option) (*Client, error) {
+	if !isValidURL(baseURL) {
+		return nil, ErrInvalidURL
 	}
 
-	// Convert adapters to internal types
-	var internalAuditory adapter.AuditoryAdapter
-	if auditory != nil {
-		internalAuditory = &auditoryWrapper{adapter: auditory}
+	baseURL = normalizeURL(baseURL)
+	cfg := newConfig(opts...)
+
+	httpClient := &http.Client{
+		Timeout:   cfg.timeout,
+		Transport: buildTransport(cfg),
 	}
 
-	var internalCorrelation adapter.CorrelationIDAdapter
-	if correlation != nil {
-		internalCorrelation = adapter.CorrelationIDAdapter(correlation)
-	}
+	return &Client{
+		httpClient: httpClient,
+		baseURL:    baseURL,
+		config:     cfg,
+	}, nil
+}
 
-	c, err := client.NewClientHttp(baseUrl, internalAuditory, internalCorrelation, internalOpts...)
+// Get performs an HTTP GET request.
+func (c *Client) Get(ctx context.Context, endpoint string, opts ...RequestOption) (*Response, error) {
+	return c.Do(ctx, http.MethodGet, endpoint, nil, opts...)
+}
+
+// Post performs an HTTP POST request.
+func (c *Client) Post(ctx context.Context, endpoint string, body []byte, opts ...RequestOption) (*Response, error) {
+	return c.Do(ctx, http.MethodPost, endpoint, body, opts...)
+}
+
+// Put performs an HTTP PUT request.
+func (c *Client) Put(ctx context.Context, endpoint string, body []byte, opts ...RequestOption) (*Response, error) {
+	return c.Do(ctx, http.MethodPut, endpoint, body, opts...)
+}
+
+// Patch performs an HTTP PATCH request.
+func (c *Client) Patch(ctx context.Context, endpoint string, body []byte, opts ...RequestOption) (*Response, error) {
+	return c.Do(ctx, http.MethodPatch, endpoint, body, opts...)
+}
+
+// Delete performs an HTTP DELETE request.
+func (c *Client) Delete(ctx context.Context, endpoint string, opts ...RequestOption) (*Response, error) {
+	return c.Do(ctx, http.MethodDelete, endpoint, nil, opts...)
+}
+
+// Do performs an HTTP request with the given method.
+func (c *Client) Do(ctx context.Context, method, endpoint string, body []byte, opts ...RequestOption) (*Response, error) {
+	rc := newRequestConfig(opts...)
+
+	endpoint = normalizeEndpoint(endpoint)
+	reqURL := fmt.Sprintf("%s/%s", c.baseURL, endpoint)
+
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, ErrInvalidBaseURL
+		return nil, newError(method, reqURL, 0, nil, err)
 	}
 
-	return &clientWrapper{internal: c}, nil
-}
+	c.applyHeaders(ctx, req, rc.headers)
+	c.applyQueryParams(req, rc.queryParams)
+	c.applyCookies(req)
+	c.applyBasicAuth(req, rc.headers)
 
-// auditoryWrapper wraps the public AuditoryAdapter to implement the internal interface.
-type auditoryWrapper struct {
-	adapter AuditoryAdapter
-}
-
-func (w *auditoryWrapper) Save(ctx context.Context, request *structs.Request, response *structs.Response) {
-	// Convert internal types to public types
-	var pubRequest *Request
-	if request != nil {
-		pubRequest = &Request{
-			Url:     request.Url,
-			Method:  request.Method,
-			Headers: request.Headers,
-			Params:  request.Params,
-			Cookies: request.Cookies,
-			Body:    request.Body,
+	// Audit request
+	var auditReq *AuditRequest
+	if c.config.auditor != nil {
+		auditReq = &AuditRequest{
+			URL:     req.URL.String(),
+			Method:  method,
+			Headers: req.Header.Clone(),
+			Body:    body,
 		}
 	}
 
-	var pubResponse *Response
-	if response != nil {
-		pubResponse = &Response{
-			StatusCode: response.StatusCode,
-			Body:       response.Body,
-			Headers:    response.Headers,
-		}
-	}
-
-	w.adapter.Save(ctx, pubRequest, pubResponse)
-}
-
-// Get implements Client.Get
-func (c *clientWrapper) Get(ctx context.Context, input GetRequest, opts ...RequestModifier) (*Response, error) {
-	internalInput := structs.GetRequest{
-		BaseInput: structs.BaseInput{
-			Endpoint:    input.Endpoint,
-			QueryParams: input.QueryParams,
-			Headers:     input.Headers,
-		},
-	}
-
-	internalOpts := convertModifiers(opts)
-	resp, err := c.internal.Get(ctx, internalInput, internalOpts...)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, newError(method, reqURL, 0, nil, err)
 	}
+	defer resp.Body.Close()
 
-	return convertResponse(resp), nil
-}
-
-// Post implements Client.Post
-func (c *clientWrapper) Post(ctx context.Context, input PostRequest, opts ...RequestModifier) (*Response, error) {
-	internalInput := structs.PostRequest{
-		BaseInput: structs.BaseInput{
-			Endpoint:    input.Endpoint,
-			QueryParams: input.QueryParams,
-			Headers:     input.Headers,
-		},
-		Body: input.Body,
-	}
-
-	internalOpts := convertModifiers(opts)
-	resp, err := c.internal.Post(ctx, internalInput, internalOpts...)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, newError(method, reqURL, 0, nil, err)
 	}
 
-	return convertResponse(resp), nil
-}
-
-// Put implements Client.Put
-func (c *clientWrapper) Put(ctx context.Context, input PutRequest, opts ...RequestModifier) (*Response, error) {
-	internalInput := structs.PutRequest{
-		BaseInput: structs.BaseInput{
-			Endpoint:    input.Endpoint,
-			QueryParams: input.QueryParams,
-			Headers:     input.Headers,
-		},
-		Body: input.Body,
-	}
-
-	internalOpts := convertModifiers(opts)
-	resp, err := c.internal.Put(ctx, internalInput, internalOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return convertResponse(resp), nil
-}
-
-// Patch implements Client.Patch
-func (c *clientWrapper) Patch(ctx context.Context, input PatchRequest, opts ...RequestModifier) (*Response, error) {
-	internalInput := structs.PatchRequest{
-		BaseInput: structs.BaseInput{
-			Endpoint:    input.Endpoint,
-			QueryParams: input.QueryParams,
-			Headers:     input.Headers,
-		},
-		Body: input.Body,
-	}
-
-	internalOpts := convertModifiers(opts)
-	resp, err := c.internal.Patch(ctx, internalInput, internalOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return convertResponse(resp), nil
-}
-
-// Del implements Client.Del
-func (c *clientWrapper) Del(ctx context.Context, input DelRequest, opts ...RequestModifier) (*Response, error) {
-	internalInput := structs.DelRequest{
-		BaseInput: structs.BaseInput{
-			Endpoint:    input.Endpoint,
-			QueryParams: input.QueryParams,
-			Headers:     input.Headers,
-		},
-	}
-
-	internalOpts := convertModifiers(opts)
-	resp, err := c.internal.Del(ctx, internalInput, internalOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return convertResponse(resp), nil
-}
-
-// DoRequest implements Client.DoRequest
-func (c *clientWrapper) DoRequest(ctx context.Context, method, endpoint string, queryParams map[string]string, body []byte, headers map[string]string, opts ...RequestModifier) (*Response, error) {
-	internalOpts := convertModifiers(opts)
-	resp, err := c.internal.DoRequest(ctx, method, endpoint, queryParams, body, headers, internalOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return convertResponse(resp), nil
-}
-
-// DoFormRequest implements Client.DoFormRequest
-func (c *clientWrapper) DoFormRequest(ctx context.Context, endpoint string, data map[string]string) (*Response, error) {
-	resp, err := c.internal.DoFormRequest(ctx, endpoint, data)
-	if err != nil {
-		return nil, err
-	}
-
-	return convertResponse(resp), nil
-}
-
-// Helper functions for type conversions
-
-func convertResponse(resp *structs.Response) *Response {
-	if resp == nil {
-		return nil
-	}
-	return &Response{
+	response := &Response{
 		StatusCode: resp.StatusCode,
-		Body:       resp.Body,
-		Headers:    resp.Headers,
+		Body:       respBody,
+		Headers:    resp.Header,
+	}
+
+	// Audit response
+	if c.config.auditor != nil {
+		auditResp := &AuditResponse{
+			StatusCode: resp.StatusCode,
+			Headers:    resp.Header.Clone(),
+			Body:       respBody,
+		}
+		c.config.auditor.Log(ctx, auditReq, auditResp)
+	}
+
+	if !response.OK() {
+		return response, newError(method, reqURL, resp.StatusCode, respBody, ErrRequestFailed)
+	}
+
+	return response, nil
+}
+
+// PostForm performs a POST request with form data.
+func (c *Client) PostForm(ctx context.Context, endpoint string, data map[string]string, opts ...RequestOption) (*Response, error) {
+	form := url.Values{}
+	for k, v := range data {
+		form.Add(k, v)
+	}
+
+	endpoint = normalizeEndpoint(endpoint)
+	reqURL := fmt.Sprintf("%s/%s", c.baseURL, endpoint)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, newError(http.MethodPost, reqURL, 0, nil, err)
+	}
+
+	rc := newRequestConfig(opts...)
+	c.applyHeaders(ctx, req, rc.headers)
+	c.applyQueryParams(req, rc.queryParams)
+	c.applyCookies(req)
+
+	// Override Content-Type for form data (must be after applyHeaders)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, newError(http.MethodPost, reqURL, 0, nil, err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, newError(http.MethodPost, reqURL, 0, nil, err)
+	}
+
+	response := &Response{
+		StatusCode: resp.StatusCode,
+		Body:       respBody,
+		Headers:    resp.Header,
+	}
+
+	if !response.OK() {
+		return response, newError(http.MethodPost, reqURL, resp.StatusCode, respBody, ErrRequestFailed)
+	}
+
+	return response, nil
+}
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+func (c *Client) applyHeaders(ctx context.Context, req *http.Request, headers map[string]string) {
+	req.Header.Set("Content-Type", c.config.contentType)
+
+	if c.config.authCallback != nil {
+		c.config.authCallback(req)
+	}
+
+	// Set correlation ID
+	if c.config.correlationFn != nil {
+		req.Header.Set("X-Correlation-ID", c.config.correlationFn(ctx))
+	} else {
+		req.Header.Set("X-Correlation-ID", uuid.New().String())
+	}
+
+	// Set request ID
+	if req.Header.Get("X-Request-ID") == "" {
+		req.Header.Set("X-Request-ID", uuid.New().String())
+	}
+
+	// Apply custom headers
+	for k, v := range headers {
+		if !strings.HasPrefix(k, "_") { // Skip internal markers
+			req.Header.Set(k, v)
+		}
 	}
 }
 
-func convertModifiers(opts []RequestModifier) []structs.NewRequestModifier {
-	result := make([]structs.NewRequestModifier, len(opts))
-	for i, opt := range opts {
-		result[i] = structs.NewRequestModifier(opt)
+func (c *Client) applyQueryParams(req *http.Request, params map[string]string) {
+	if len(params) == 0 {
+		return
 	}
-	return result
+
+	q := req.URL.Query()
+	for k, v := range params {
+		q.Add(k, v)
+	}
+	req.URL.RawQuery = q.Encode()
+}
+
+func (c *Client) applyCookies(req *http.Request) {
+	for i := range c.config.cookies {
+		req.AddCookie(&c.config.cookies[i])
+	}
+}
+
+func (c *Client) applyBasicAuth(req *http.Request, headers map[string]string) {
+	user, hasUser := headers["_basic_auth_user"]
+	pass, hasPass := headers["_basic_auth_pass"]
+	if hasUser && hasPass {
+		req.SetBasicAuth(user, pass)
+	}
+}
+
+func buildTransport(cfg *config) *http.Transport {
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   cfg.dialTimeout,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   cfg.tlsHandshakeTimeout,
+		ResponseHeaderTimeout: cfg.responseHeaderTimeout,
+		MaxIdleConns:          cfg.transport.maxIdleConns,
+		MaxIdleConnsPerHost:   cfg.transport.maxIdleConnsPerHost,
+		MaxConnsPerHost:       cfg.transport.maxConnsPerHost,
+		IdleConnTimeout:       cfg.transport.idleConnTimeout,
+		ForceAttemptHTTP2:     true,
+	}
+
+	if cfg.tls.enabled {
+		transport.TLSClientConfig = buildTLSConfig(cfg)
+	}
+
+	return transport
+}
+
+func buildTLSConfig(cfg *config) *tls.Config {
+	if cfg.tls.customConfig != nil {
+		return cfg.tls.customConfig
+	}
+
+	return &tls.Config{
+		InsecureSkipVerify: cfg.tls.insecureSkipVerify,
+		RootCAs:            cfg.tls.rootCAs,
+		Certificates:       cfg.tls.certificates,
+		MinVersion:         cfg.tls.minVersion,
+		MaxVersion:         cfg.tls.maxVersion,
+	}
+}
+
+func isValidURL(u string) bool {
+	return strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://")
+}
+
+func normalizeURL(u string) string {
+	u = strings.TrimSpace(u)
+	u = strings.TrimSuffix(u, "/")
+	return u
+}
+
+func normalizeEndpoint(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	endpoint = strings.TrimPrefix(endpoint, "/")
+	endpoint = strings.TrimSuffix(endpoint, "?")
+	return endpoint
 }

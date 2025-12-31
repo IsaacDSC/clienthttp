@@ -16,12 +16,10 @@ func NewAuditoryService() *AuditoryService {
 }
 
 type RequestAudit struct {
-	Url     string              `json:"url"`
-	Method  string              `json:"method"`
-	Headers map[string][]string `json:"headers"`
-	Params  string              `json:"params"`
-	Cookies []*http.Cookie      `json:"cookies"`
-	Body    string              `json:"body"`
+	URL     string      `json:"url"`
+	Method  string      `json:"method"`
+	Headers http.Header `json:"headers"`
+	Body    string      `json:"body"`
 }
 
 type ResponseAudit struct {
@@ -29,13 +27,12 @@ type ResponseAudit struct {
 	Body       string `json:"body"`
 }
 
-func (as AuditoryService) Save(ctx context.Context, request *clienthttp.Request, response *clienthttp.Response) {
+// Log implements clienthttp.Auditor interface
+func (as AuditoryService) Log(ctx context.Context, request *clienthttp.AuditRequest, response *clienthttp.AuditResponse) {
 	req := RequestAudit{
-		Url:     request.Url,
+		URL:     request.URL,
 		Method:  request.Method,
 		Headers: request.Headers,
-		Params:  request.Params,
-		Cookies: request.Cookies,
 		Body:    string(request.Body),
 	}
 
@@ -44,7 +41,7 @@ func (as AuditoryService) Save(ctx context.Context, request *clienthttp.Request,
 		Body:       string(response.Body),
 	}
 
-	payload, err := json.Marshal(map[string]any{"request": req, "response": res})
+	payload, err := json.MarshalIndent(map[string]any{"request": req, "response": res}, "", "  ")
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -33,7 +33,11 @@ func main() {
 		log.Fatal("AuditoryService não pôde ser criado")
 	}
 
-	client, err := clienthttp.New(baseURL, auditoryService, GetCorrelation)
+	client, err := clienthttp.New(baseURL,
+		clienthttp.WithAuditor(auditoryService),
+		clienthttp.WithCorrelationID(GetCorrelation),
+		clienthttp.WithTimeout(30*time.Second),
+	)
 	if err != nil {
 		log.Fatalf("Erro ao criar cliente HTTP: %v", err)
 	}
@@ -54,23 +58,12 @@ func main() {
 
 	fmt.Println("JSON gerado com sucesso:", string(b))
 
-	// Definir headers e query params
-	headers := map[string]string{"Content-Type": "application/json"}
-	queryParams := map[string]string{"test": "true"}
-
-	fmt.Println("Headers:", headers)
-	fmt.Println("Query params:", queryParams)
-
 	fmt.Println("Enviando requisição POST...")
 	// Usando o endpoint /post do httpbin.org para testar
-	res, err := client.Post(ctx, clienthttp.PostRequest{
-		BaseInput: clienthttp.BaseInput{
-			Endpoint:    "/post",
-			QueryParams: queryParams,
-			Headers:     headers,
-		},
-		Body: b,
-	})
+	res, err := client.Post(ctx, "/post", b,
+		clienthttp.WithQuery("test", "true"),
+		clienthttp.WithHeader("Content-Type", "application/json"),
+	)
 
 	// Tratar erro na requisição detalhadamente
 	if err != nil {
@@ -86,7 +79,27 @@ func main() {
 	fmt.Println("Resposta recebida com sucesso!")
 	fmt.Println("Status code:", res.StatusCode)
 	fmt.Println("Corpo da resposta:")
-	fmt.Println(string(res.Body))
+	fmt.Println(res.String())
+
+	// Exemplo com GET e parsing JSON da resposta
+	fmt.Println("\n--- Exemplo com GET e JSON ---")
+	getRes, err := client.Get(ctx, "/get",
+		clienthttp.WithQuery("example", "json-parsing"),
+	)
+	if err != nil {
+		log.Printf("Erro no GET: %v", err)
+	} else {
+		fmt.Println("GET funcionou!")
+		fmt.Printf("Status: %d\n", getRes.StatusCode)
+
+		// Parse JSON manualmente - mais controle sobre erros
+		var result map[string]interface{}
+		if err := getRes.JSON(&result); err != nil {
+			log.Printf("Erro ao parsear JSON: %v", err)
+		} else {
+			fmt.Printf("Args recebidos: %v\n", result["args"])
+		}
+	}
 
 	fmt.Println("\nLog de auditoria salvo em 'auditory_payload.json'")
 }

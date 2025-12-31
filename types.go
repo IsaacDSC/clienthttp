@@ -1,6 +1,10 @@
 package clienthttp
 
-import "net/http"
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+)
 
 // Response represents an HTTP response.
 type Response struct {
@@ -9,56 +13,41 @@ type Response struct {
 	Headers    http.Header
 }
 
-// IsStatusSuccessfully returns true if the status code is in the 2xx range.
-func (r Response) IsStatusSuccessfully() bool {
+// OK returns true if the status code is in the 2xx range.
+func (r *Response) OK() bool {
 	return r.StatusCode >= 200 && r.StatusCode < 300
 }
 
-// Request represents an HTTP request for auditing purposes.
-type Request struct {
-	Url     string
+// JSON unmarshals the response body into the provided value.
+func (r *Response) JSON(v any) error {
+	return json.Unmarshal(r.Body, v)
+}
+
+// String returns the response body as a string.
+func (r *Response) String() string {
+	return string(r.Body)
+}
+
+// Auditor is an interface for auditing HTTP requests and responses.
+// Implement this interface to log or save audit trails of HTTP traffic.
+type Auditor interface {
+	Log(ctx context.Context, req *AuditRequest, resp *AuditResponse)
+}
+
+// AuditRequest contains request information for auditing purposes.
+type AuditRequest struct {
+	URL     string
 	Method  string
-	Headers map[string][]string
-	Params  string
-	Cookies []*http.Cookie
+	Headers http.Header
 	Body    []byte
 }
 
-// RequestModifier is a function that can modify an HTTP request before it is sent.
-type RequestModifier func(r *http.Request)
-
-// BaseInput contains common fields for all request types.
-type BaseInput struct {
-	Endpoint    string
-	QueryParams map[string]string
-	Headers     map[string]string
+// AuditResponse contains response information for auditing purposes.
+type AuditResponse struct {
+	StatusCode int
+	Headers    http.Header
+	Body       []byte
 }
 
-// GetRequest represents input for a GET request.
-type GetRequest struct {
-	BaseInput
-}
-
-// DelRequest represents input for a DELETE request.
-type DelRequest struct {
-	BaseInput
-}
-
-// PatchRequest represents input for a PATCH request.
-type PatchRequest struct {
-	BaseInput
-	Body []byte
-}
-
-// PostRequest represents input for a POST request.
-type PostRequest struct {
-	BaseInput
-	Body []byte
-}
-
-// PutRequest represents input for a PUT request.
-type PutRequest struct {
-	BaseInput
-	Body []byte
-}
-
+// CorrelationIDFunc extracts or generates a correlation ID from the context.
+type CorrelationIDFunc func(ctx context.Context) string

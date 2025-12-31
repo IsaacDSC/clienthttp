@@ -1,17 +1,16 @@
 # ClientHTTP
 
-Uma biblioteca de cliente HTTP para Go que simplifica requisições HTTP com suporte para auditoria, rastreamento de IDs de correlação e manipulação flexível de requisições e respostas.
+Uma biblioteca de cliente HTTP idiomática para Go que simplifica requisições HTTP com suporte para auditoria, rastreamento de IDs de correlação e manipulação flexível de requisições e respostas.
 
 ## Características
 
+- API simples e idiomática
 - Suporte completo para métodos HTTP (GET, POST, PUT, DELETE, PATCH)
-- Adaptadores personalizáveis para auditoria de requisições
+- Adaptadores opcionais para auditoria de requisições
 - Gerenciamento de IDs de correlação
-- Configuração flexível via opções (timeouts, connection pool, TLS/mTLS)
-- Manipulação simplificada de headers, query parameters e cookies
-- Suporte para submissão de formulários
-- Interface pública limpa com implementação interna encapsulada
-- Erros sentinel para tratamento de erros consistente
+- Configuração flexível via options (timeouts, connection pool, TLS/mTLS)
+- Request options para headers, query params e autenticação por requisição
+- Erros estruturados com suporte a `errors.Is` e `errors.As`
 
 ## Instalação
 
@@ -21,7 +20,7 @@ go get -u github.com/IsaacDSC/clienthttp
 
 ## Uso Básico
 
-### Inicialização do Cliente
+### Criando um Cliente
 
 ```go
 package main
@@ -33,134 +32,141 @@ import (
 )
 
 func main() {
-    // Função para obter correlation ID do contexto
-    getCorrelation := func(ctx context.Context) string {
-        return "my-correlation-id"
-    }
-    
-    // Inicializa o cliente com a URL base
-    client, err := clienthttp.New(
-        "https://api.example.com",
-        nil,              // adapter de auditoria (opcional)
-        getCorrelation,   // função de correlation ID (opcional)
-    )
+    // Cria cliente com URL base
+    client, err := clienthttp.New("https://api.example.com")
     if err != nil {
         panic(err)
     }
     
-    // Agora você pode usar o cliente para fazer requisições
+    // GET simples
+    resp, err := client.Get(context.Background(), "/users")
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(resp.String())
 }
 ```
 
-### Fazendo uma requisição GET
+### Enviando JSON
 
 ```go
-func makeGetRequest(client clienthttp.Client) {
-    ctx := context.Background()
-    
-    // Cria a requisição GET
-    request := clienthttp.GetRequest{
-        BaseInput: clienthttp.BaseInput{
-            Endpoint: "users",
-            QueryParams: map[string]string{
-                "page":  "1",
-                "limit": "10",
-            },
-            Headers: map[string]string{
-                "Accept": "application/json",
-            },
-        },
-    }
-    
-    // Executa a requisição
-    response, err := client.Get(ctx, request)
-    if err != nil {
-        fmt.Printf("Erro na requisição: %v\n", err)
-        return
-    }
-    
-    fmt.Printf("Status Code: %d\n", response.StatusCode)
-    fmt.Printf("Body: %s\n", string(response.Body))
+// Marshal o body manualmente para ter controle total
+data, _ := json.Marshal(User{Name: "John", Email: "john@example.com"})
+
+resp, err := client.Post(ctx, "/users", data)
+if err != nil {
+    // tratar erro
+}
+
+// Unmarshal a resposta
+var created User
+if err := resp.JSON(&created); err != nil {
+    // tratar erro de parsing
 }
 ```
 
-### Fazendo uma requisição POST
+### Request Options
 
 ```go
-func makePostRequest(client clienthttp.Client) {
-    ctx := context.Background()
-    
-    // Dados para enviar no corpo da requisição
-    body := []byte(`{"name": "John", "email": "john@example.com"}`)
-    
-    // Cria a requisição POST
-    request := clienthttp.PostRequest{
-        BaseInput: clienthttp.BaseInput{
-            Endpoint: "users",
-            Headers: map[string]string{
-                "Content-Type": "application/json",
-            },
-        },
-        Body: body,
-    }
-    
-    // Executa a requisição
-    response, err := client.Post(ctx, request)
-    if err != nil {
-        fmt.Printf("Erro na requisição: %v\n", err)
-        return
-    }
-    
-    fmt.Printf("Status Code: %d\n", response.StatusCode)
-    fmt.Printf("Body: %s\n", string(response.Body))
-}
+// Query parameters
+resp, err := client.Get(ctx, "/users",
+    clienthttp.WithQuery("page", "1"),
+    clienthttp.WithQuery("limit", "10"),
+)
+
+// Headers customizados
+resp, err := client.Get(ctx, "/protected",
+    clienthttp.WithHeader("X-Custom-Header", "value"),
+    clienthttp.WithBearerToken("my-jwt-token"),
+)
+
+// Basic Auth
+resp, err := client.Get(ctx, "/admin",
+    clienthttp.WithBasicAuth("username", "password"),
+)
+
+// Múltiplos query params e headers de uma vez
+resp, err := client.Get(ctx, "/search",
+    clienthttp.WithQueries(map[string]string{
+        "q":     "golang",
+        "sort":  "stars",
+        "order": "desc",
+    }),
+    clienthttp.WithHeaders(map[string]string{
+        "Accept":          "application/json",
+        "Accept-Language": "pt-BR",
+    }),
+)
 ```
 
-### Submissão de Formulário
+### Formulários
 
 ```go
-func submitForm(client clienthttp.Client) {
-    ctx := context.Background()
-    
-    // Dados do formulário
-    formData := map[string]string{
-        "username": "johndoe",
-        "password": "secretpassword",
+resp, err := client.PostForm(ctx, "/login", map[string]string{
+    "username": "johndoe",
+    "password": "secret",
+})
+```
+
+### Trabalhando com Response
+
+```go
+resp, err := client.Get(ctx, "/users/123")
+if err != nil {
+    // tratar erro
+}
+
+// Verificar se foi sucesso (2xx)
+if resp.OK() {
+    // Unmarshal para struct
+    var user User
+    if err := resp.JSON(&user); err != nil {
+        // tratar erro de parsing
     }
     
-    // Executa a requisição de formulário
-    response, err := client.DoFormRequest(ctx, "login", formData)
-    if err != nil {
-        fmt.Printf("Erro na requisição: %v\n", err)
-        return
-    }
+    // Ou como string
+    body := resp.String()
     
-    fmt.Printf("Status Code: %d\n", response.StatusCode)
-    fmt.Printf("Body: %s\n", string(response.Body))
+    // Acessar headers
+    contentType := resp.Headers.Get("Content-Type")
 }
 ```
 
 ## Auditoria de Requisições
 
-A biblioteca suporta auditoria automática de requisições e respostas através do adaptador de auditoria.
+Implemente a interface `Auditor` para logging automático:
 
 ```go
-// Implementação de um adaptador de auditoria personalizado
-type MyAuditAdapter struct{}
+type MyAuditor struct{}
 
-func (a *MyAuditAdapter) Save(ctx context.Context, request *clienthttp.Request, response *clienthttp.Response) {
-    // Lógica para salvar a auditoria (ex: log, banco de dados, etc)
-    fmt.Printf("Audit: %s %s - Status: %d\n", request.Method, request.Url, response.StatusCode)
+func (a *MyAuditor) Log(ctx context.Context, req *clienthttp.AuditRequest, resp *clienthttp.AuditResponse) {
+    log.Printf("%s %s -> %d", req.Method, req.URL, resp.StatusCode)
 }
 
-// Uso:
-auditAdapter := &MyAuditAdapter{}
-client, _ := clienthttp.New("https://api.example.com", auditAdapter, nil)
+// Usar com o cliente
+client, err := clienthttp.New("https://api.example.com",
+    clienthttp.WithAuditor(&MyAuditor{}),
+)
+```
+
+## Correlation ID
+
+Configure uma função para extrair ou gerar correlation IDs:
+
+```go
+getCorrelationID := func(ctx context.Context) string {
+    if id, ok := ctx.Value("correlation_id").(string); ok {
+        return id
+    }
+    return uuid.New().String()
+}
+
+client, err := clienthttp.New("https://api.example.com",
+    clienthttp.WithCorrelationID(getCorrelationID),
+)
 ```
 
 ## Configuração Avançada
-
-A biblioteca suporta configuração através de opções:
 
 ```go
 import (
@@ -169,66 +175,28 @@ import (
     "time"
 )
 
-client, err := clienthttp.New(
-    "https://api.example.com",
-    auditAdapter,
-    correlationFunc,
-
-    // ═══════════════════════════════════════════════════════════════════
-    // TIMEOUTS - Controle de tempo limite para diferentes fases da requisição
-    // ═══════════════════════════════════════════════════════════════════
-
-    // Timeout total da requisição (inclui conexão, envio, espera e leitura)
-    // Se a requisição completa não terminar nesse tempo, será cancelada
+client, err := clienthttp.New("https://api.example.com",
+    // Timeouts
     clienthttp.WithTimeout(30*time.Second),
-
-    // Tempo máximo para estabelecer a conexão TCP com o servidor
-    // Útil para falhar rápido quando o servidor está inacessível
     clienthttp.WithDialTimeout(10*time.Second),
-
-    // Tempo máximo para completar o handshake TLS/SSL
-    // Importante para conexões HTTPS - evita travamentos em certificados lentos
     clienthttp.WithTLSHandshakeTimeout(10*time.Second),
-
-    // Tempo máximo para receber os headers da resposta após enviar a requisição
-    // Detecta servidores que demoram demais para começar a responder
     clienthttp.WithResponseHeaderTimeout(10*time.Second),
 
-    // ═══════════════════════════════════════════════════════════════════
-    // CONNECTION POOL - Reutilização de conexões para melhor performance
-    // ═══════════════════════════════════════════════════════════════════
-
-    // Número máximo de conexões idle (ociosas) mantidas abertas no pool total
-    // Conexões são reutilizadas para evitar overhead de criar novas conexões
+    // Connection Pool
     clienthttp.WithMaxIdleConns(100),
-
-    // Máximo de conexões idle por host específico
-    // Ex: se você acessa api.exemplo.com, até 10 conexões ficam abertas esperando reuso
     clienthttp.WithMaxIdleConnsPerHost(10),
-
-    // Limite máximo de conexões simultâneas por host (idle + ativas)
-    // Previne sobrecarga em um único servidor - útil para rate limiting
     clienthttp.WithMaxConnsPerHost(100),
-
-    // Tempo que uma conexão idle pode ficar no pool antes de ser fechada
-    // Conexões não usadas por 90s são removidas para liberar recursos
     clienthttp.WithIdleConnTimeout(90*time.Second),
 
-    // ═══════════════════════════════════════════════════════════════════
-    // TLS - Configurações de segurança para conexões HTTPS
-    // ═══════════════════════════════════════════════════════════════════
-
-    // Versão mínima do protocolo TLS aceita (TLS 1.2 é o recomendado mínimo)
-    // Versões antigas (TLS 1.0, 1.1) têm vulnerabilidades conhecidas
+    // TLS
     clienthttp.WithTLSMinVersion(tls.VersionTLS12),
-
-    // Certificado CA raiz para validar o certificado do servidor
-    // Necessário quando o servidor usa certificado auto-assinado ou CA privada
     clienthttp.WithRootCA("/path/to/ca.pem"),
-
-    // Certificado e chave do cliente para autenticação mTLS (mutual TLS)
-    // O servidor valida a identidade do cliente - comum em APIs internas seguras
     clienthttp.WithClientCertificate("/path/to/cert.pem", "/path/to/key.pem"),
+
+    // Adapters
+    clienthttp.WithAuditor(myAuditor),
+    clienthttp.WithCorrelationID(correlationFunc),
+    clienthttp.WithAuthCallback(addAuthHeader),
 )
 ```
 
@@ -252,41 +220,85 @@ client, err := clienthttp.New(
 | `WithClientCertificate(cert, key)` | Certificado client para mTLS | - |
 | `WithClientCertificateFromPEM(cert, key)` | Certificado client via bytes | - |
 | `WithInsecureSkipVerify()` | Desabilita verificação TLS | false |
+| `WithAuditor(a)` | Adaptador de auditoria | nil |
+| `WithCorrelationID(fn)` | Função para correlation ID | nil |
+| `WithAuthCallback(fn)` | Callback para autenticação | nil |
+| `WithContentType(ct)` | Content-Type padrão | application/json |
+| `WithCookies(cookies...)` | Cookies padrão | - |
+
+### Request Options
+
+| Option | Descrição |
+|--------|-----------|
+| `WithQuery(k, v)` | Adiciona query parameter |
+| `WithQueries(map)` | Adiciona múltiplos query params |
+| `WithHeader(k, v)` | Adiciona header |
+| `WithHeaders(map)` | Adiciona múltiplos headers |
+| `WithBearerToken(token)` | Adiciona Bearer token |
+| `WithBasicAuth(user, pass)` | Adiciona Basic Auth |
 
 ## Tratamento de Erros
 
-A biblioteca fornece erros sentinel para tratamento consistente:
+A biblioteca fornece erros estruturados:
 
 ```go
-import "errors"
-
-client, err := clienthttp.New("invalid-url", nil, nil)
-if errors.Is(err, clienthttp.ErrInvalidBaseURL) {
-    fmt.Println("URL inválida fornecida")
+resp, err := client.Get(ctx, "/users/123")
+if err != nil {
+    // Verificar tipo de erro
+    var httpErr *clienthttp.Error
+    if errors.As(err, &httpErr) {
+        fmt.Printf("Request to %s failed with status %d\n", 
+            httpErr.URL, httpErr.StatusCode)
+        fmt.Printf("Response body: %s\n", string(httpErr.Body))
+    }
+    
+    // Verificar erros específicos
+    if errors.Is(err, clienthttp.ErrInvalidURL) {
+        fmt.Println("URL inválida")
+    }
+    if errors.Is(err, clienthttp.ErrRequestFailed) {
+        fmt.Println("Requisição retornou status não-2xx")
+    }
 }
-
-// Erros disponíveis:
-// - clienthttp.ErrInvalidBaseURL    - URL base inválida
-// - clienthttp.ErrRequestFailed     - Requisição falhou (status não 2xx)
-// - clienthttp.ErrReadResponseBody  - Erro ao ler corpo da resposta
 ```
+
+### Erros Disponíveis
+
+| Erro | Descrição |
+|------|-----------|
+| `ErrInvalidURL` | URL base inválida |
+| `ErrRequestFailed` | Requisição retornou status não-2xx |
+| `ErrTimeout` | Requisição excedeu timeout |
 
 ## API Pública
 
-A biblioteca expõe apenas:
+### Tipos
 
-- **Interface `Client`** - para fazer requisições HTTP
-- **Tipos de dados** - `Request`, `Response`, `GetRequest`, `PostRequest`, etc.
-- **Interfaces** - `AuditoryAdapter`, `CorrelationIDAdapter`
-- **Options** - funções `With*` para configuração
-- **Erros sentinel** - para tratamento de erros
-- **Constantes** - valores default de configuração
+- `Client` - Cliente HTTP
+- `Response` - Resposta HTTP com métodos `OK()`, `JSON()`, `String()`
+- `Auditor` - Interface para auditoria
+- `AuditRequest` - Dados da requisição para auditoria
+- `AuditResponse` - Dados da resposta para auditoria
+- `Error` - Erro estruturado com contexto
 
-A implementação interna está protegida em `internal/` e não pode ser acessada.
+### Métodos do Client
 
-## Exemplos Completos
+```go
+// HTTP básico
+Get(ctx, endpoint, opts...) (*Response, error)
+Post(ctx, endpoint, body, opts...) (*Response, error)
+Put(ctx, endpoint, body, opts...) (*Response, error)
+Patch(ctx, endpoint, body, opts...) (*Response, error)
+Delete(ctx, endpoint, opts...) (*Response, error)
+Do(ctx, method, endpoint, body, opts...) (*Response, error)
 
-Veja a pasta `example/` para exemplos completos de uso da biblioteca:
+// Form
+PostForm(ctx, endpoint, data, opts...) (*Response, error)
+```
+
+## Exemplos
+
+Veja a pasta `example/` para exemplos completos:
 
 ```bash
 # Executar exemplo básico

@@ -1,144 +1,67 @@
 package clienthttp
 
 import (
-	"clienthttp/internal/client"
 	"crypto/tls"
+	"crypto/x509"
+	"net/http"
+	"os"
 	"time"
 )
 
-// Option is a function that configures the HTTP client.
-type Option = client.Option
-
 // ============================================================================
-// Timeout Options
+// Client Configuration
 // ============================================================================
 
-// WithTimeout sets the total request timeout.
-// This is the maximum time allowed for the entire request including
-// connection, TLS handshake, sending request, and reading response.
-// Default: 30 seconds
-func WithTimeout(d time.Duration) Option {
-	return client.WithTimeout(d)
+// config holds the client configuration options.
+type config struct {
+	// Callbacks and adapters
+	authCallback  func(r *http.Request)
+	auditor       Auditor
+	correlationFn CorrelationIDFunc
+
+	// Request defaults
+	contentType string
+	cookies     []http.Cookie
+
+	// Timeout configuration
+	timeout               time.Duration
+	dialTimeout           time.Duration
+	tlsHandshakeTimeout   time.Duration
+	responseHeaderTimeout time.Duration
+
+	// Connection pool configuration
+	transport transportConfig
+
+	// TLS configuration
+	tls tlsConfig
 }
 
-// WithDialTimeout sets the maximum time allowed for establishing a connection.
-// Default: 10 seconds
-func WithDialTimeout(d time.Duration) Option {
-	return client.WithDialTimeout(d)
+// transportConfig holds connection pool configuration options.
+type transportConfig struct {
+	maxIdleConns        int
+	maxIdleConnsPerHost int
+	maxConnsPerHost     int
+	idleConnTimeout     time.Duration
 }
 
-// WithTLSHandshakeTimeout sets the maximum time allowed for the TLS handshake.
-// Default: 10 seconds
-func WithTLSHandshakeTimeout(d time.Duration) Option {
-	return client.WithTLSHandshakeTimeout(d)
+// tlsConfig holds TLS/SSL configuration options.
+type tlsConfig struct {
+	enabled            bool
+	customConfig       *tls.Config
+	insecureSkipVerify bool
+	rootCAs            *x509.CertPool
+	certificates       []tls.Certificate
+	minVersion         uint16
+	maxVersion         uint16
 }
 
-// WithResponseHeaderTimeout sets the maximum time to wait for a server's
-// response headers after fully writing the request.
-// Default: 10 seconds
-func WithResponseHeaderTimeout(d time.Duration) Option {
-	return client.WithResponseHeaderTimeout(d)
-}
+// Option configures the HTTP client.
+type Option func(*config)
 
-// ============================================================================
-// Connection Pool Options
-// ============================================================================
-
-// WithMaxIdleConns sets the maximum number of idle (keep-alive) connections
-// across all hosts. Zero means no limit.
-// Default: 100
-func WithMaxIdleConns(n int) Option {
-	return client.WithMaxIdleConns(n)
-}
-
-// WithMaxIdleConnsPerHost sets the maximum idle (keep-alive) connections
-// to keep per-host. If zero, DefaultMaxIdleConnsPerHost is used.
-// Default: 10
-func WithMaxIdleConnsPerHost(n int) Option {
-	return client.WithMaxIdleConnsPerHost(n)
-}
-
-// WithMaxConnsPerHost optionally limits the total number of connections
-// per host, including connections in the dialing, active, and idle states.
-// Zero means no limit.
-// Default: 100
-func WithMaxConnsPerHost(n int) Option {
-	return client.WithMaxConnsPerHost(n)
-}
-
-// WithIdleConnTimeout sets the maximum amount of time an idle (keep-alive)
-// connection will remain idle before closing itself.
-// Zero means no limit.
-// Default: 90 seconds
-func WithIdleConnTimeout(d time.Duration) Option {
-	return client.WithIdleConnTimeout(d)
-}
-
-// ============================================================================
-// TLS/SSL Options
-// ============================================================================
-
-// WithTLSConfig sets a custom TLS configuration.
-// This allows full control over TLS settings. When provided, other TLS options
-// (WithInsecureSkipVerify, WithRootCA, etc.) are ignored.
-func WithTLSConfig(tlsConfig *tls.Config) Option {
-	return client.WithTLSConfig(tlsConfig)
-}
-
-// WithInsecureSkipVerify disables TLS certificate verification.
-// WARNING: This should only be used for development/testing purposes.
-// Using this in production is a security risk.
-func WithInsecureSkipVerify() Option {
-	return client.WithInsecureSkipVerify()
-}
-
-// WithTLSMinVersion sets the minimum TLS version that is acceptable.
-// Use tls.VersionTLS10, tls.VersionTLS11, tls.VersionTLS12, or tls.VersionTLS13.
-// Default: tls.VersionTLS12
-func WithTLSMinVersion(version uint16) Option {
-	return client.WithTLSMinVersion(version)
-}
-
-// WithTLSMaxVersion sets the maximum TLS version that is acceptable.
-// Use tls.VersionTLS10, tls.VersionTLS11, tls.VersionTLS12, or tls.VersionTLS13.
-// Default: 0 (uses the maximum version available)
-func WithTLSMaxVersion(version uint16) Option {
-	return client.WithTLSMaxVersion(version)
-}
-
-// WithRootCA adds a custom root CA certificate from a PEM file.
-// This is useful for connecting to servers with certificates signed by
-// a private/corporate CA.
-func WithRootCA(caFile string) Option {
-	return client.WithRootCA(caFile)
-}
-
-// WithRootCAFromPEM adds a custom root CA certificate from PEM-encoded bytes.
-// This is useful for connecting to servers with certificates signed by
-// a private/corporate CA.
-func WithRootCAFromPEM(caPEM []byte) Option {
-	return client.WithRootCAFromPEM(caPEM)
-}
-
-// WithClientCertificate loads a client certificate and key from PEM files
-// for mutual TLS (mTLS) authentication.
-func WithClientCertificate(certFile, keyFile string) Option {
-	return client.WithClientCertificate(certFile, keyFile)
-}
-
-// WithClientCertificateFromPEM loads a client certificate and key from
-// PEM-encoded bytes for mutual TLS (mTLS) authentication.
-func WithClientCertificateFromPEM(certPEM, keyPEM []byte) Option {
-	return client.WithClientCertificateFromPEM(certPEM, keyPEM)
-}
-
-// ============================================================================
-// Default Values (exported for reference)
-// ============================================================================
-
+// Default values
 const (
-	// JsonContentType is the default content type for requests.
-	JsonContentType = "application/json"
+	// ContentTypeJSON is the default content type for requests.
+	ContentTypeJSON = "application/json"
 
 	// DefaultTimeout is the default total request timeout.
 	DefaultTimeout = 30 * time.Second
@@ -166,7 +89,306 @@ const (
 
 	// DefaultTLSMinVersion is the default minimum TLS version (TLS 1.2).
 	DefaultTLSMinVersion uint16 = tls.VersionTLS12
-
-	// DefaultTLSMaxVersion is the default maximum TLS version (0 = use maximum available).
-	DefaultTLSMaxVersion uint16 = 0
 )
+
+func newConfig(opts ...Option) *config {
+	c := &config{
+		contentType:           ContentTypeJSON,
+		cookies:               make([]http.Cookie, 0),
+		timeout:               DefaultTimeout,
+		dialTimeout:           DefaultDialTimeout,
+		tlsHandshakeTimeout:   DefaultTLSHandshakeTimeout,
+		responseHeaderTimeout: DefaultResponseHeaderTimeout,
+		transport: transportConfig{
+			maxIdleConns:        DefaultMaxIdleConns,
+			maxIdleConnsPerHost: DefaultMaxIdleConnsPerHost,
+			maxConnsPerHost:     DefaultMaxConnsPerHost,
+			idleConnTimeout:     DefaultIdleConnTimeout,
+		},
+		tls: tlsConfig{
+			minVersion: DefaultTLSMinVersion,
+		},
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c
+}
+
+// ============================================================================
+// Client Options - Timeout
+// ============================================================================
+
+// WithTimeout sets the total request timeout.
+// Default: 30 seconds
+func WithTimeout(d time.Duration) Option {
+	return func(c *config) {
+		c.timeout = d
+	}
+}
+
+// WithDialTimeout sets the maximum time for establishing a connection.
+// Default: 10 seconds
+func WithDialTimeout(d time.Duration) Option {
+	return func(c *config) {
+		c.dialTimeout = d
+	}
+}
+
+// WithTLSHandshakeTimeout sets the maximum time for the TLS handshake.
+// Default: 10 seconds
+func WithTLSHandshakeTimeout(d time.Duration) Option {
+	return func(c *config) {
+		c.tlsHandshakeTimeout = d
+	}
+}
+
+// WithResponseHeaderTimeout sets the maximum time to wait for response headers.
+// Default: 10 seconds
+func WithResponseHeaderTimeout(d time.Duration) Option {
+	return func(c *config) {
+		c.responseHeaderTimeout = d
+	}
+}
+
+// ============================================================================
+// Client Options - Connection Pool
+// ============================================================================
+
+// WithMaxIdleConns sets the maximum number of idle connections across all hosts.
+// Default: 100
+func WithMaxIdleConns(n int) Option {
+	return func(c *config) {
+		c.transport.maxIdleConns = n
+	}
+}
+
+// WithMaxIdleConnsPerHost sets the maximum idle connections per host.
+// Default: 10
+func WithMaxIdleConnsPerHost(n int) Option {
+	return func(c *config) {
+		c.transport.maxIdleConnsPerHost = n
+	}
+}
+
+// WithMaxConnsPerHost limits the total connections per host.
+// Default: 100
+func WithMaxConnsPerHost(n int) Option {
+	return func(c *config) {
+		c.transport.maxConnsPerHost = n
+	}
+}
+
+// WithIdleConnTimeout sets the maximum time an idle connection remains open.
+// Default: 90 seconds
+func WithIdleConnTimeout(d time.Duration) Option {
+	return func(c *config) {
+		c.transport.idleConnTimeout = d
+	}
+}
+
+// ============================================================================
+// Client Options - TLS
+// ============================================================================
+
+// WithTLSConfig sets a custom TLS configuration.
+func WithTLSConfig(tlsConfig *tls.Config) Option {
+	return func(c *config) {
+		c.tls.enabled = true
+		c.tls.customConfig = tlsConfig
+	}
+}
+
+// WithInsecureSkipVerify disables TLS certificate verification.
+// WARNING: Only use for development/testing.
+func WithInsecureSkipVerify() Option {
+	return func(c *config) {
+		c.tls.enabled = true
+		c.tls.insecureSkipVerify = true
+	}
+}
+
+// WithTLSMinVersion sets the minimum acceptable TLS version.
+// Default: tls.VersionTLS12
+func WithTLSMinVersion(version uint16) Option {
+	return func(c *config) {
+		c.tls.enabled = true
+		c.tls.minVersion = version
+	}
+}
+
+// WithTLSMaxVersion sets the maximum acceptable TLS version.
+func WithTLSMaxVersion(version uint16) Option {
+	return func(c *config) {
+		c.tls.enabled = true
+		c.tls.maxVersion = version
+	}
+}
+
+// WithRootCA adds a custom root CA certificate from a PEM file.
+func WithRootCA(caFile string) Option {
+	return func(c *config) {
+		caPEM, err := os.ReadFile(caFile)
+		if err != nil {
+			c.tls.enabled = true
+			return
+		}
+
+		if c.tls.rootCAs == nil {
+			c.tls.rootCAs = x509.NewCertPool()
+		}
+		c.tls.rootCAs.AppendCertsFromPEM(caPEM)
+		c.tls.enabled = true
+	}
+}
+
+// WithRootCAFromPEM adds a custom root CA certificate from PEM bytes.
+func WithRootCAFromPEM(caPEM []byte) Option {
+	return func(c *config) {
+		if c.tls.rootCAs == nil {
+			c.tls.rootCAs = x509.NewCertPool()
+		}
+		c.tls.rootCAs.AppendCertsFromPEM(caPEM)
+		c.tls.enabled = true
+	}
+}
+
+// WithClientCertificate loads a client certificate for mTLS from PEM files.
+func WithClientCertificate(certFile, keyFile string) Option {
+	return func(c *config) {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			c.tls.enabled = true
+			return
+		}
+		c.tls.certificates = append(c.tls.certificates, cert)
+		c.tls.enabled = true
+	}
+}
+
+// WithClientCertificateFromPEM loads a client certificate for mTLS from PEM bytes.
+func WithClientCertificateFromPEM(certPEM, keyPEM []byte) Option {
+	return func(c *config) {
+		cert, err := tls.X509KeyPair(certPEM, keyPEM)
+		if err != nil {
+			c.tls.enabled = true
+			return
+		}
+		c.tls.certificates = append(c.tls.certificates, cert)
+		c.tls.enabled = true
+	}
+}
+
+// ============================================================================
+// Client Options - Adapters
+// ============================================================================
+
+// WithAuditor sets an auditor for logging requests and responses.
+func WithAuditor(a Auditor) Option {
+	return func(c *config) {
+		c.auditor = a
+	}
+}
+
+// WithCorrelationID sets a function to extract correlation IDs from context.
+func WithCorrelationID(fn CorrelationIDFunc) Option {
+	return func(c *config) {
+		c.correlationFn = fn
+	}
+}
+
+// WithAuthCallback sets a callback to add authentication to requests.
+func WithAuthCallback(fn func(r *http.Request)) Option {
+	return func(c *config) {
+		c.authCallback = fn
+	}
+}
+
+// WithContentType sets the default content type for requests.
+// Default: "application/json"
+func WithContentType(contentType string) Option {
+	return func(c *config) {
+		c.contentType = contentType
+	}
+}
+
+// WithCookies sets default cookies to be sent with every request.
+func WithCookies(cookies ...http.Cookie) Option {
+	return func(c *config) {
+		c.cookies = append(c.cookies, cookies...)
+	}
+}
+
+// ============================================================================
+// Request Options (per-request)
+// ============================================================================
+
+// requestConfig holds per-request configuration.
+type requestConfig struct {
+	headers     map[string]string
+	queryParams map[string]string
+}
+
+// RequestOption configures a single HTTP request.
+type RequestOption func(*requestConfig)
+
+func newRequestConfig(opts ...RequestOption) *requestConfig {
+	rc := &requestConfig{
+		headers:     make(map[string]string),
+		queryParams: make(map[string]string),
+	}
+	for _, opt := range opts {
+		opt(rc)
+	}
+	return rc
+}
+
+// WithQuery adds a query parameter to the request.
+func WithQuery(key, value string) RequestOption {
+	return func(rc *requestConfig) {
+		rc.queryParams[key] = value
+	}
+}
+
+// WithQueries adds multiple query parameters to the request.
+func WithQueries(params map[string]string) RequestOption {
+	return func(rc *requestConfig) {
+		for k, v := range params {
+			rc.queryParams[k] = v
+		}
+	}
+}
+
+// WithHeader adds a header to the request.
+func WithHeader(key, value string) RequestOption {
+	return func(rc *requestConfig) {
+		rc.headers[key] = value
+	}
+}
+
+// WithHeaders adds multiple headers to the request.
+func WithHeaders(headers map[string]string) RequestOption {
+	return func(rc *requestConfig) {
+		for k, v := range headers {
+			rc.headers[k] = v
+		}
+	}
+}
+
+// WithBasicAuth adds Basic Authentication to the request.
+func WithBasicAuth(username, password string) RequestOption {
+	return func(rc *requestConfig) {
+		// Basic auth will be set directly on the request
+		rc.headers["_basic_auth_user"] = username
+		rc.headers["_basic_auth_pass"] = password
+	}
+}
+
+// WithBearerToken adds a Bearer token to the Authorization header.
+func WithBearerToken(token string) RequestOption {
+	return func(rc *requestConfig) {
+		rc.headers["Authorization"] = "Bearer " + token
+	}
+}
