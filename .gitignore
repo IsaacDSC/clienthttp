@@ -1,2 +1,8 @@
 ./auditory_payload.json
 .idea
+ca-key.pem
+ca.pem
+server-key.pem
+server.pem
+client-key.pem
+client.pem
