@@ -173,19 +173,61 @@ client, err := clienthttp.New(
     "https://api.example.com",
     auditAdapter,
     correlationFunc,
-    // Timeouts
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TIMEOUTS - Controle de tempo limite para diferentes fases da requisição
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Timeout total da requisição (inclui conexão, envio, espera e leitura)
+    // Se a requisição completa não terminar nesse tempo, será cancelada
     clienthttp.WithTimeout(30*time.Second),
+
+    // Tempo máximo para estabelecer a conexão TCP com o servidor
+    // Útil para falhar rápido quando o servidor está inacessível
     clienthttp.WithDialTimeout(10*time.Second),
+
+    // Tempo máximo para completar o handshake TLS/SSL
+    // Importante para conexões HTTPS - evita travamentos em certificados lentos
     clienthttp.WithTLSHandshakeTimeout(10*time.Second),
+
+    // Tempo máximo para receber os headers da resposta após enviar a requisição
+    // Detecta servidores que demoram demais para começar a responder
     clienthttp.WithResponseHeaderTimeout(10*time.Second),
-    // Connection Pool
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CONNECTION POOL - Reutilização de conexões para melhor performance
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Número máximo de conexões idle (ociosas) mantidas abertas no pool total
+    // Conexões são reutilizadas para evitar overhead de criar novas conexões
     clienthttp.WithMaxIdleConns(100),
+
+    // Máximo de conexões idle por host específico
+    // Ex: se você acessa api.exemplo.com, até 10 conexões ficam abertas esperando reuso
     clienthttp.WithMaxIdleConnsPerHost(10),
+
+    // Limite máximo de conexões simultâneas por host (idle + ativas)
+    // Previne sobrecarga em um único servidor - útil para rate limiting
     clienthttp.WithMaxConnsPerHost(100),
+
+    // Tempo que uma conexão idle pode ficar no pool antes de ser fechada
+    // Conexões não usadas por 90s são removidas para liberar recursos
     clienthttp.WithIdleConnTimeout(90*time.Second),
-    // TLS
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TLS - Configurações de segurança para conexões HTTPS
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Versão mínima do protocolo TLS aceita (TLS 1.2 é o recomendado mínimo)
+    // Versões antigas (TLS 1.0, 1.1) têm vulnerabilidades conhecidas
     clienthttp.WithTLSMinVersion(tls.VersionTLS12),
+
+    // Certificado CA raiz para validar o certificado do servidor
+    // Necessário quando o servidor usa certificado auto-assinado ou CA privada
     clienthttp.WithRootCA("/path/to/ca.pem"),
+
+    // Certificado e chave do cliente para autenticação mTLS (mutual TLS)
+    // O servidor valida a identidade do cliente - comum em APIs internas seguras
     clienthttp.WithClientCertificate("/path/to/cert.pem", "/path/to/key.pem"),
 )
 ```
