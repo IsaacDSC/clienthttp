@@ -86,7 +86,7 @@ go run main.go -insecure
 O cliente usa `WithRootCA()` para confiar no certificado self-signed do servidor:
 
 ```go
-client, _ := clienthttp.NewClientHttp(serverURL, nil, nil,
+client, _ := clienthttp.New(serverURL, nil, nil,
     clienthttp.WithRootCA("certs/ca.pem"),
     clienthttp.WithTLSMinVersion(tls.VersionTLS12),
 )
@@ -97,7 +97,7 @@ client, _ := clienthttp.NewClientHttp(serverURL, nil, nil,
 Autenticação bidirecional onde servidor e cliente verificam certificados mutuamente:
 
 ```go
-client, _ := clienthttp.NewClientHttp(serverURL, nil, nil,
+client, _ := clienthttp.New(serverURL, nil, nil,
     clienthttp.WithRootCA("certs/ca.pem"),
     clienthttp.WithClientCertificate("certs/client.pem", "certs/client-key.pem"),
 )
@@ -108,7 +108,7 @@ client, _ := clienthttp.NewClientHttp(serverURL, nil, nil,
 Para desenvolvimento local sem certificados válidos:
 
 ```go
-client, _ := clienthttp.NewClientHttp(serverURL, nil, nil,
+client, _ := clienthttp.New(serverURL, nil, nil,
     clienthttp.WithInsecureSkipVerify(),
 )
 ```
@@ -158,4 +158,3 @@ curl --cacert certs/ca.pem \
 ### "tls: client didn't provide a certificate"
 - O servidor requer certificado do cliente (mTLS)
 - Execute o cliente com `-mtls` flag
-

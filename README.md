@@ -7,14 +7,16 @@ Uma biblioteca de cliente HTTP para Go que simplifica requisições HTTP com sup
 - Suporte completo para métodos HTTP (GET, POST, PUT, DELETE, PATCH)
 - Adaptadores personalizáveis para auditoria de requisições
 - Gerenciamento de IDs de correlação
-- Configuração flexível via opções
+- Configuração flexível via opções (timeouts, connection pool, TLS/mTLS)
 - Manipulação simplificada de headers, query parameters e cookies
 - Suporte para submissão de formulários
+- Interface pública limpa com implementação interna encapsulada
+- Erros sentinel para tratamento de erros consistente
 
 ## Instalação
 
 ```bash
-go get -u github.com/github.com/IsaacDSC/clienthttp
+go get -u github.com/IsaacDSC/clienthttp
 ```
 
 ## Uso Básico
@@ -27,21 +29,20 @@ package main
 import (
     "context"
     "fmt"
-    "clienthttp/pkg/adapter"
-    "clienthttp/pkg/clienthttp"
-    "clienthttp/pkg/structs"
+    "clienthttp"
 )
 
 func main() {
-    // Cria adaptadores para auditoria e correlação de ID
-    auditAdapter := adapter.NewAuditoryAdapter()
-    correlationAdapter := adapter.NewCorrelationIDAdapter()
+    // Função para obter correlation ID do contexto
+    getCorrelation := func(ctx context.Context) string {
+        return "my-correlation-id"
+    }
     
     // Inicializa o cliente com a URL base
-    client, err := clienthttp.NewClientHttp(
+    client, err := clienthttp.New(
         "https://api.example.com",
-        auditAdapter,
-        correlationAdapter,
+        nil,              // adapter de auditoria (opcional)
+        getCorrelation,   // função de correlation ID (opcional)
     )
     if err != nil {
         panic(err)
@@ -54,18 +55,20 @@ func main() {
 ### Fazendo uma requisição GET
 
 ```go
-func makeGetRequest(client *clienthttp.ClientHttp) {
+func makeGetRequest(client clienthttp.Client) {
     ctx := context.Background()
     
     // Cria a requisição GET
-    request := structs.GetRequest{
-        Endpoint: "users",
-        QueryParams: map[string]string{
-            "page": "1",
-            "limit": "10",
-        },
-        Headers: map[string]string{
-            "Accept": "application/json",
+    request := clienthttp.GetRequest{
+        BaseInput: clienthttp.BaseInput{
+            Endpoint: "users",
+            QueryParams: map[string]string{
+                "page":  "1",
+                "limit": "10",
+            },
+            Headers: map[string]string{
+                "Accept": "application/json",
+            },
         },
     }
     
@@ -84,20 +87,21 @@ func makeGetRequest(client *clienthttp.ClientHttp) {
 ### Fazendo uma requisição POST
 
 ```go
-func makePostRequest(client *clienthttp.ClientHttp) {
+func makePostRequest(client clienthttp.Client) {
     ctx := context.Background()
     
     // Dados para enviar no corpo da requisição
     body := []byte(`{"name": "John", "email": "john@example.com"}`)
     
     // Cria a requisição POST
-    request := structs.PostRequest{
-        Endpoint: "users",
-        Body: body,
-        Headers: map[string]string{
-            "Content-Type": "application/json",
-            "Accept": "application/json",
+    request := clienthttp.PostRequest{
+        BaseInput: clienthttp.BaseInput{
+            Endpoint: "users",
+            Headers: map[string]string{
+                "Content-Type": "application/json",
+            },
         },
+        Body: body,
     }
     
     // Executa a requisição
@@ -115,7 +119,7 @@ func makePostRequest(client *clienthttp.ClientHttp) {
 ### Submissão de Formulário
 
 ```go
-func submitForm(client *clienthttp.ClientHttp) {
+func submitForm(client clienthttp.Client) {
     ctx := context.Background()
     
     // Dados do formulário
@@ -142,16 +146,16 @@ A biblioteca suporta auditoria automática de requisições e respostas através
 
 ```go
 // Implementação de um adaptador de auditoria personalizado
-type MyAuditAdapter struct {}
+type MyAuditAdapter struct{}
 
-func (a *MyAuditAdapter) Save(ctx context.Context, request *structs.Request, response *structs.Response) {
+func (a *MyAuditAdapter) Save(ctx context.Context, request *clienthttp.Request, response *clienthttp.Response) {
     // Lógica para salvar a auditoria (ex: log, banco de dados, etc)
     fmt.Printf("Audit: %s %s - Status: %d\n", request.Method, request.Url, response.StatusCode)
 }
 
 // Uso:
 auditAdapter := &MyAuditAdapter{}
-client, _ := clienthttp.NewClientHttp("https://api.example.com", auditAdapter, correlationAdapter)
+client, _ := clienthttp.New("https://api.example.com", auditAdapter, nil)
 ```
 
 ## Configuração Avançada
@@ -159,19 +163,99 @@ client, _ := clienthttp.NewClientHttp("https://api.example.com", auditAdapter, c
 A biblioteca suporta configuração através de opções:
 
 ```go
-// Exemplo de configuração com opções personalizadas
-client, err := clienthttp.NewClientHttp(
+import (
+    "clienthttp"
+    "crypto/tls"
+    "time"
+)
+
+client, err := clienthttp.New(
     "https://api.example.com",
     auditAdapter,
-    correlationAdapter,
-    clienthttp.WithTimeout(30), // timeout em segundos
-    // outras opções aqui
+    correlationFunc,
+    // Timeouts
+    clienthttp.WithTimeout(30*time.Second),
+    clienthttp.WithDialTimeout(10*time.Second),
+    clienthttp.WithTLSHandshakeTimeout(10*time.Second),
+    clienthttp.WithResponseHeaderTimeout(10*time.Second),
+    // Connection Pool
+    clienthttp.WithMaxIdleConns(100),
+    clienthttp.WithMaxIdleConnsPerHost(10),
+    clienthttp.WithMaxConnsPerHost(100),
+    clienthttp.WithIdleConnTimeout(90*time.Second),
+    // TLS
+    clienthttp.WithTLSMinVersion(tls.VersionTLS12),
+    clienthttp.WithRootCA("/path/to/ca.pem"),
+    clienthttp.WithClientCertificate("/path/to/cert.pem", "/path/to/key.pem"),
 )
 ```
 
+### Options Disponíveis
+
+| Option | Descrição | Default |
+|--------|-----------|---------|
+| `WithTimeout(d)` | Timeout total da requisição | 30s |
+| `WithDialTimeout(d)` | Timeout para estabelecer conexão | 10s |
+| `WithTLSHandshakeTimeout(d)` | Timeout para handshake TLS | 10s |
+| `WithResponseHeaderTimeout(d)` | Timeout para receber headers | 10s |
+| `WithMaxIdleConns(n)` | Máximo de conexões idle | 100 |
+| `WithMaxIdleConnsPerHost(n)` | Máximo de conexões idle por host | 10 |
+| `WithMaxConnsPerHost(n)` | Máximo de conexões por host | 100 |
+| `WithIdleConnTimeout(d)` | Timeout de conexão idle | 90s |
+| `WithTLSConfig(config)` | Configuração TLS customizada | - |
+| `WithTLSMinVersion(v)` | Versão TLS mínima | TLS 1.2 |
+| `WithTLSMaxVersion(v)` | Versão TLS máxima | - |
+| `WithRootCA(file)` | CA customizada via arquivo | - |
+| `WithRootCAFromPEM(bytes)` | CA customizada via bytes | - |
+| `WithClientCertificate(cert, key)` | Certificado client para mTLS | - |
+| `WithClientCertificateFromPEM(cert, key)` | Certificado client via bytes | - |
+| `WithInsecureSkipVerify()` | Desabilita verificação TLS | false |
+
+## Tratamento de Erros
+
+A biblioteca fornece erros sentinel para tratamento consistente:
+
+```go
+import "errors"
+
+client, err := clienthttp.New("invalid-url", nil, nil)
+if errors.Is(err, clienthttp.ErrInvalidBaseURL) {
+    fmt.Println("URL inválida fornecida")
+}
+
+// Erros disponíveis:
+// - clienthttp.ErrInvalidBaseURL    - URL base inválida
+// - clienthttp.ErrRequestFailed     - Requisição falhou (status não 2xx)
+// - clienthttp.ErrReadResponseBody  - Erro ao ler corpo da resposta
+```
+
+## API Pública
+
+A biblioteca expõe apenas:
+
+- **Interface `Client`** - para fazer requisições HTTP
+- **Tipos de dados** - `Request`, `Response`, `GetRequest`, `PostRequest`, etc.
+- **Interfaces** - `AuditoryAdapter`, `CorrelationIDAdapter`
+- **Options** - funções `With*` para configuração
+- **Erros sentinel** - para tratamento de erros
+- **Constantes** - valores default de configuração
+
+A implementação interna está protegida em `internal/` e não pode ser acessada.
+
 ## Exemplos Completos
 
-Veja a pasta `example/` para exemplos completos de uso da biblioteca.
+Veja a pasta `example/` para exemplos completos de uso da biblioteca:
+
+```bash
+# Executar exemplo básico
+go run ./example/
+
+# Executar exemplo TLS/mTLS
+cd example/tls
+./certs/generate.sh  # Gerar certificados primeiro
+go run ./server/     # Em um terminal
+go run ./client/     # Em outro terminal
+```
 
 ## Contribuição
 
@@ -179,5 +263,4 @@ Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou PRs.
 
 ## Licença
 
-[Especificar a licença aqui]
-
+MIT License
