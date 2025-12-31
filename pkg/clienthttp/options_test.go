@@ -1,9 +1,56 @@
 package clienthttp
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+// generateSelfSignedCertForTest generates a self-signed certificate and key for testing
+func generateSelfSignedCertForTest(t *testing.T) (certPEM, keyPEM []byte) {
+	t.Helper()
+
+	// Generate private key
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Failed to generate private key: %v", err)
+	}
+
+	// Create certificate template
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "test-client",
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+	}
+
+	// Create certificate
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("Failed to create certificate: %v", err)
+	}
+
+	// Encode certificate to PEM
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
+	// Encode private key to PEM
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+
+	return certPEM, keyPEM
+}
 
 // ============================================================================
 // Timeout Options Tests
@@ -321,6 +368,321 @@ func TestBuildTransport_ReturnsConfiguredTransport(t *testing.T) {
 	}
 	if !transport.ForceAttemptHTTP2 {
 		t.Error("ForceAttemptHTTP2 should be true")
+	}
+}
+
+// ============================================================================
+// TLS Options Tests
+// ============================================================================
+
+func TestTLS_DefaultValues(t *testing.T) {
+	cfg := newConfig()
+
+	if cfg.tls.enabled {
+		t.Error("TLS should be disabled by default")
+	}
+	if cfg.tls.insecureSkipVerify {
+		t.Error("insecureSkipVerify should be false by default")
+	}
+	if cfg.tls.minVersion != tls.VersionTLS12 {
+		t.Errorf("minVersion = %v, want %v (TLS 1.2)", cfg.tls.minVersion, tls.VersionTLS12)
+	}
+	if cfg.tls.maxVersion != 0 {
+		t.Errorf("maxVersion = %v, want 0 (no limit)", cfg.tls.maxVersion)
+	}
+}
+
+func TestWithTLSConfig_SetsCustomConfig(t *testing.T) {
+	customConfig := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+		MaxVersion: tls.VersionTLS13,
+	}
+
+	cfg := newConfig(WithTLSConfig(customConfig))
+
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled when custom config is set")
+	}
+	if cfg.tls.customConfig != customConfig {
+		t.Error("customConfig should be set to provided config")
+	}
+}
+
+func TestWithInsecureSkipVerify_EnablesOption(t *testing.T) {
+	cfg := newConfig(WithInsecureSkipVerify())
+
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled when InsecureSkipVerify is set")
+	}
+	if !cfg.tls.insecureSkipVerify {
+		t.Error("insecureSkipVerify should be true")
+	}
+}
+
+func TestWithTLSMinVersion_SetsValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		version uint16
+	}{
+		{"TLS 1.0", tls.VersionTLS10},
+		{"TLS 1.1", tls.VersionTLS11},
+		{"TLS 1.2", tls.VersionTLS12},
+		{"TLS 1.3", tls.VersionTLS13},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := newConfig(WithTLSMinVersion(tt.version))
+
+			if !cfg.tls.enabled {
+				t.Error("TLS should be enabled when MinVersion is set")
+			}
+			if cfg.tls.minVersion != tt.version {
+				t.Errorf("minVersion = %v, want %v", cfg.tls.minVersion, tt.version)
+			}
+		})
+	}
+}
+
+func TestWithTLSMaxVersion_SetsValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		version uint16
+	}{
+		{"TLS 1.2", tls.VersionTLS12},
+		{"TLS 1.3", tls.VersionTLS13},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := newConfig(WithTLSMaxVersion(tt.version))
+
+			if !cfg.tls.enabled {
+				t.Error("TLS should be enabled when MaxVersion is set")
+			}
+			if cfg.tls.maxVersion != tt.version {
+				t.Errorf("maxVersion = %v, want %v", cfg.tls.maxVersion, tt.version)
+			}
+		})
+	}
+}
+
+func TestWithRootCAFromPEM_AddsCA(t *testing.T) {
+	// Valid CA certificate PEM (self-signed for testing)
+	caPEM := []byte(`-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAKHBfpegPjMCMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBnRl
+c3RjYTAeFw0yMzAxMDEwMDAwMDBaFw0zMzAxMDEwMDAwMDBaMBExDzANBgNVBAMM
+BnRlc3RjYTBcMA0GCSqGSIb3DQEBAQUAA0sAMEgCQQC7o96WsME5mq+5tJMHBjJL
+oLvXwFiCgReJ0X5kXJA8uJCJoLvXS8AEvPNeRALd5TxDwCCX6F4NNANBgSmKdN7b
+AgMBAAGjUzBRMB0GA1UdDgQWBBQJtOxEaJU3+rzJFcChPv5Yn8tj0DAfBgNVHSME
+GDAWgBQJtOxEaJU3+rzJFcChPv5Yn8tj0DAPBgNVHRMBAf8EBTADAQH/MA0GCSqG
+SIb3DQEBCwUAA0EAqVrPvOLOb2qPdOLQ8GOQB8gF3rrP8FqP5dYf0LvfK1qLwryO
+9t1TbJI1xIeS3GHPFT0FrDl5fX5hPOUAWnZhEA==
+-----END CERTIFICATE-----`)
+
+	cfg := newConfig(WithRootCAFromPEM(caPEM))
+
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled when RootCA is set")
+	}
+	if cfg.tls.rootCAs == nil {
+		t.Error("rootCAs should not be nil")
+	}
+}
+
+func TestWithRootCA_NonExistentFile(t *testing.T) {
+	cfg := newConfig(WithRootCA("/nonexistent/path/ca.pem"))
+
+	// Should still enable TLS even if file doesn't exist
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled even when file doesn't exist")
+	}
+	// rootCAs should be nil since file doesn't exist
+	if cfg.tls.rootCAs != nil {
+		t.Error("rootCAs should be nil when file doesn't exist")
+	}
+}
+
+func TestWithRootCA_ValidFile(t *testing.T) {
+	// Create a temporary CA file
+	caPEM := []byte(`-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAKHBfpegPjMCMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBnRl
+c3RjYTAeFw0yMzAxMDEwMDAwMDBaFw0zMzAxMDEwMDAwMDBaMBExDzANBgNVBAMM
+BnRlc3RjYTBcMA0GCSqGSIb3DQEBAQUAA0sAMEgCQQC7o96WsME5mq+5tJMHBjJL
+oLvXwFiCgReJ0X5kXJA8uJCJoLvXS8AEvPNeRALd5TxDwCCX6F4NNANBgSmKdN7b
+AgMBAAGjUzBRMB0GA1UdDgQWBBQJtOxEaJU3+rzJFcChPv5Yn8tj0DAfBgNVHSME
+GDAWgBQJtOxEaJU3+rzJFcChPv5Yn8tj0DAPBgNVHRMBAf8EBTADAQH/MA0GCSqG
+SIb3DQEBCwUAA0EAqVrPvOLOb2qPdOLQ8GOQB8gF3rrP8FqP5dYf0LvfK1qLwryO
+9t1TbJI1xIeS3GHPFT0FrDl5fX5hPOUAWnZhEA==
+-----END CERTIFICATE-----`)
+
+	tmpDir := t.TempDir()
+	caFile := filepath.Join(tmpDir, "ca.pem")
+	if err := os.WriteFile(caFile, caPEM, 0644); err != nil {
+		t.Fatalf("Failed to write temp CA file: %v", err)
+	}
+
+	cfg := newConfig(WithRootCA(caFile))
+
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled when RootCA file is valid")
+	}
+	if cfg.tls.rootCAs == nil {
+		t.Error("rootCAs should not be nil when file is valid")
+	}
+}
+
+func TestWithClientCertificateFromPEM_AddsCertificate(t *testing.T) {
+	// Generate a valid self-signed certificate for testing
+	certPEM, keyPEM := generateSelfSignedCertForTest(t)
+
+	cfg := newConfig(WithClientCertificateFromPEM(certPEM, keyPEM))
+
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled when client certificate is set")
+	}
+	if len(cfg.tls.certificates) != 1 {
+		t.Errorf("certificates length = %d, want 1", len(cfg.tls.certificates))
+	}
+}
+
+func TestWithClientCertificateFromPEM_InvalidCert(t *testing.T) {
+	invalidCertPEM := []byte("invalid certificate")
+	invalidKeyPEM := []byte("invalid key")
+
+	cfg := newConfig(WithClientCertificateFromPEM(invalidCertPEM, invalidKeyPEM))
+
+	// Should still enable TLS even with invalid cert
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled even with invalid certificate")
+	}
+	// But certificates should be empty
+	if len(cfg.tls.certificates) != 0 {
+		t.Errorf("certificates length = %d, want 0", len(cfg.tls.certificates))
+	}
+}
+
+func TestWithClientCertificate_NonExistentFiles(t *testing.T) {
+	cfg := newConfig(WithClientCertificate("/nonexistent/cert.pem", "/nonexistent/key.pem"))
+
+	// Should still enable TLS even if files don't exist
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled even when files don't exist")
+	}
+	// But certificates should be empty
+	if len(cfg.tls.certificates) != 0 {
+		t.Errorf("certificates length = %d, want 0", len(cfg.tls.certificates))
+	}
+}
+
+func TestWithClientCertificate_ValidFiles(t *testing.T) {
+	// Generate a valid self-signed certificate for testing
+	certPEM, keyPEM := generateSelfSignedCertForTest(t)
+
+	tmpDir := t.TempDir()
+	certFile := filepath.Join(tmpDir, "client.pem")
+	keyFile := filepath.Join(tmpDir, "client-key.pem")
+
+	if err := os.WriteFile(certFile, certPEM, 0644); err != nil {
+		t.Fatalf("Failed to write temp cert file: %v", err)
+	}
+	if err := os.WriteFile(keyFile, keyPEM, 0600); err != nil {
+		t.Fatalf("Failed to write temp key file: %v", err)
+	}
+
+	cfg := newConfig(WithClientCertificate(certFile, keyFile))
+
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled when certificate files are valid")
+	}
+	if len(cfg.tls.certificates) != 1 {
+		t.Errorf("certificates length = %d, want 1", len(cfg.tls.certificates))
+	}
+}
+
+func TestBuildTLSConfig_WithCustomConfig(t *testing.T) {
+	customConfig := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+
+	cfg := newConfig(WithTLSConfig(customConfig))
+	tlsConfig := cfg.buildTLSConfig()
+
+	if tlsConfig != customConfig {
+		t.Error("buildTLSConfig should return the custom config when set")
+	}
+}
+
+func TestBuildTLSConfig_WithOptions(t *testing.T) {
+	cfg := newConfig(
+		WithInsecureSkipVerify(),
+		WithTLSMinVersion(tls.VersionTLS13),
+		WithTLSMaxVersion(tls.VersionTLS13),
+	)
+
+	tlsConfig := cfg.buildTLSConfig()
+
+	if !tlsConfig.InsecureSkipVerify {
+		t.Error("InsecureSkipVerify should be true")
+	}
+	if tlsConfig.MinVersion != tls.VersionTLS13 {
+		t.Errorf("MinVersion = %v, want %v", tlsConfig.MinVersion, tls.VersionTLS13)
+	}
+	if tlsConfig.MaxVersion != tls.VersionTLS13 {
+		t.Errorf("MaxVersion = %v, want %v", tlsConfig.MaxVersion, tls.VersionTLS13)
+	}
+}
+
+func TestBuildTransport_WithTLSEnabled(t *testing.T) {
+	cfg := newConfig(WithInsecureSkipVerify())
+	transport := cfg.buildTransport()
+
+	if transport.TLSClientConfig == nil {
+		t.Error("TLSClientConfig should not be nil when TLS is enabled")
+	}
+	if !transport.TLSClientConfig.InsecureSkipVerify {
+		t.Error("InsecureSkipVerify should be true in transport TLS config")
+	}
+}
+
+func TestBuildTransport_WithoutTLSEnabled(t *testing.T) {
+	cfg := newConfig()
+	transport := cfg.buildTransport()
+
+	if transport.TLSClientConfig != nil {
+		t.Error("TLSClientConfig should be nil when TLS is not enabled")
+	}
+}
+
+func TestMultipleTLSOptions_AppliedCorrectly(t *testing.T) {
+	caPEM := []byte(`-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAKHBfpegPjMCMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBnRl
+c3RjYTAeFw0yMzAxMDEwMDAwMDBaFw0zMzAxMDEwMDAwMDBaMBExDzANBgNVBAMM
+BnRlc3RjYTBcMA0GCSqGSIb3DQEBAQUAA0sAMEgCQQC7o96WsME5mq+5tJMHBjJL
+oLvXwFiCgReJ0X5kXJA8uJCJoLvXS8AEvPNeRALd5TxDwCCX6F4NNANBgSmKdN7b
+AgMBAAGjUzBRMB0GA1UdDgQWBBQJtOxEaJU3+rzJFcChPv5Yn8tj0DAfBgNVHSME
+GDAWgBQJtOxEaJU3+rzJFcChPv5Yn8tj0DAPBgNVHRMBAf8EBTADAQH/MA0GCSqG
+SIb3DQEBCwUAA0EAqVrPvOLOb2qPdOLQ8GOQB8gF3rrP8FqP5dYf0LvfK1qLwryO
+9t1TbJI1xIeS3GHPFT0FrDl5fX5hPOUAWnZhEA==
+-----END CERTIFICATE-----`)
+
+	cfg := newConfig(
+		WithTLSMinVersion(tls.VersionTLS12),
+		WithTLSMaxVersion(tls.VersionTLS13),
+		WithRootCAFromPEM(caPEM),
+	)
+
+	if !cfg.tls.enabled {
+		t.Error("TLS should be enabled")
+	}
+	if cfg.tls.minVersion != tls.VersionTLS12 {
+		t.Errorf("minVersion = %v, want %v", cfg.tls.minVersion, tls.VersionTLS12)
+	}
+	if cfg.tls.maxVersion != tls.VersionTLS13 {
+		t.Errorf("maxVersion = %v, want %v", cfg.tls.maxVersion, tls.VersionTLS13)
+	}
+	if cfg.tls.rootCAs == nil {
+		t.Error("rootCAs should not be nil")
 	}
 }
 

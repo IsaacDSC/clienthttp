@@ -1,6 +1,8 @@
 package clienthttp
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"net/http"
 	"time"
 )
@@ -19,6 +21,9 @@ type config struct {
 
 	// Connection pool configuration
 	transport transportConfig
+
+	// TLS configuration
+	tls tlsConfig
 }
 
 type transportConfig struct {
@@ -26,6 +31,17 @@ type transportConfig struct {
 	maxIdleConnsPerHost int
 	maxConnsPerHost     int
 	idleConnTimeout     time.Duration
+}
+
+// tlsConfig holds TLS/SSL configuration options
+type tlsConfig struct {
+	enabled            bool
+	customConfig       *tls.Config      // User-provided full TLS config
+	insecureSkipVerify bool             // Skip certificate verification (dev only)
+	rootCAs            *x509.CertPool   // Custom CA certificates
+	certificates       []tls.Certificate // Client certificates for mTLS
+	minVersion         uint16           // Minimum TLS version
+	maxVersion         uint16           // Maximum TLS version
 }
 
 type Option func(*config)
@@ -55,6 +71,10 @@ const (
 	DefaultMaxIdleConnsPerHost = 10
 	DefaultMaxConnsPerHost     = 100
 	DefaultIdleConnTimeout     = 90 * time.Second
+
+	// Default TLS values
+	DefaultTLSMinVersion uint16 = tls.VersionTLS12
+	DefaultTLSMaxVersion uint16 = 0 // 0 means use the maximum version available
 )
 
 func (c *config) defaults() {
@@ -74,5 +94,13 @@ func (c *config) defaults() {
 		maxIdleConnsPerHost: DefaultMaxIdleConnsPerHost,
 		maxConnsPerHost:     DefaultMaxConnsPerHost,
 		idleConnTimeout:     DefaultIdleConnTimeout,
+	}
+
+	// TLS defaults
+	c.tls = tlsConfig{
+		enabled:            false,
+		insecureSkipVerify: false,
+		minVersion:         DefaultTLSMinVersion,
+		maxVersion:         DefaultTLSMaxVersion,
 	}
 }

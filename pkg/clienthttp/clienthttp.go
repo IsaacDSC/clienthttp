@@ -5,6 +5,7 @@ import (
 	"clienthttp/pkg/adapter"
 	"clienthttp/pkg/structs"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -48,9 +49,9 @@ func NewClientHttp(baseUrl string, auditory adapter.AuditoryAdapter, correlation
 	}, nil
 }
 
-// buildTransport creates an http.Transport with the configured timeout and connection pool settings.
+// buildTransport creates an http.Transport with the configured timeout, connection pool, and TLS settings.
 func (c *config) buildTransport() *http.Transport {
-	return &http.Transport{
+	transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   c.dialTimeout,
 			KeepAlive: 30 * time.Second,
@@ -62,6 +63,30 @@ func (c *config) buildTransport() *http.Transport {
 		MaxConnsPerHost:       c.transport.maxConnsPerHost,
 		IdleConnTimeout:       c.transport.idleConnTimeout,
 		ForceAttemptHTTP2:     true,
+	}
+
+	// Apply TLS configuration if enabled
+	if c.tls.enabled {
+		transport.TLSClientConfig = c.buildTLSConfig()
+	}
+
+	return transport
+}
+
+// buildTLSConfig creates a tls.Config based on the configured TLS options.
+func (c *config) buildTLSConfig() *tls.Config {
+	// If a custom TLS config was provided, use it directly
+	if c.tls.customConfig != nil {
+		return c.tls.customConfig
+	}
+
+	// Build TLS config from individual options
+	return &tls.Config{
+		InsecureSkipVerify: c.tls.insecureSkipVerify,
+		RootCAs:            c.tls.rootCAs,
+		Certificates:       c.tls.certificates,
+		MinVersion:         c.tls.minVersion,
+		MaxVersion:         c.tls.maxVersion,
 	}
 }
 
