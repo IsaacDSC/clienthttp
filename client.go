@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -109,6 +110,11 @@ func (c *Client) Do(ctx context.Context, method, endpoint string, body []byte, o
 
 		// Check if we should retry
 		if !strategy.ShouldRetry(attempt, resp, err) {
+			// If we've attempted at least one retry, wrap with ErrMaxRetriesExceeded
+			// so callers can detect retry exhaustion via errors.Is
+			if attempt > 0 && lastErr != nil {
+				lastErr = errors.Join(lastErr, ErrMaxRetriesExceeded)
+			}
 			break
 		}
 

@@ -386,6 +386,11 @@ func TestClient_RetryMaxAttemptsExhausted(t *testing.T) {
 		t.Error("Expected error, got nil")
 	}
 
+	// Verify that ErrMaxRetriesExceeded is included in the error chain
+	if !errors.Is(err, ErrMaxRetriesExceeded) {
+		t.Errorf("Expected error to wrap ErrMaxRetriesExceeded, got: %v", err)
+	}
+
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusServiceUnavailable)
 	}
@@ -412,7 +417,7 @@ func TestClient_NoRetryOnClientError(t *testing.T) {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	resp, _ := client.Get(context.Background(), "/test")
+	resp, err := client.Get(context.Background(), "/test")
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -421,6 +426,11 @@ func TestClient_NoRetryOnClientError(t *testing.T) {
 	// 4xx errors (except 429) should not be retried
 	if atomic.LoadInt32(&attempts) != 1 {
 		t.Errorf("attempts = %d, want 1 (no retry for 400)", attempts)
+	}
+
+	// ErrMaxRetriesExceeded should NOT be wrapped when no retries were attempted
+	if errors.Is(err, ErrMaxRetriesExceeded) {
+		t.Error("Expected error to NOT wrap ErrMaxRetriesExceeded for non-retryable error on first attempt")
 	}
 }
 
