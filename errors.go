@@ -16,6 +16,9 @@ var (
 
 	// ErrRequestFailed is returned when an HTTP request fails with a non-2xx status.
 	ErrRequestFailed = errors.New("clienthttp: request failed")
+
+	// ErrMaxRetriesExceeded is returned when all retry attempts have been exhausted.
+	ErrMaxRetriesExceeded = errors.New("clienthttp: max retries exceeded")
 )
 
 // Error represents an HTTP client error with additional context.

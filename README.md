@@ -6,6 +6,7 @@ Uma biblioteca de cliente HTTP idiomática para Go que simplifica requisições 
 
 - API simples e idiomática
 - Suporte completo para métodos HTTP (GET, POST, PUT, DELETE, PATCH)
+- **Retry automático** com estratégias customizáveis (exponential backoff, constant backoff)
 - Adaptadores opcionais para auditoria de requisições
 - Gerenciamento de IDs de correlação
 - Configuração flexível via options (timeouts, connection pool, TLS/mTLS)
@@ -149,6 +150,113 @@ client, err := clienthttp.New("https://api.example.com",
 )
 ```
 
+## Retry Automático
+
+A biblioteca suporta retry automático com estratégias configuráveis. Por padrão, retries são feitos para status codes 429, 502, 503 e 504, além de erros de rede.
+
+### Exponential Backoff (Recomendado)
+
+```go
+// Usar defaults sensatos
+client, err := clienthttp.New("https://api.example.com",
+    clienthttp.WithRetryStrategy(clienthttp.NewExponentialBackoff()),
+)
+
+// Ou configurar manualmente
+client, err := clienthttp.New("https://api.example.com",
+    clienthttp.WithRetryStrategy(&clienthttp.ExponentialBackoff{
+        MaxAttempts:  3,                      // até 3 retries
+        InitialDelay: 100 * time.Millisecond, // delay inicial
+        MaxDelay:     30 * time.Second,       // delay máximo
+        Multiplier:   2.0,                    // fator de multiplicação
+        JitterFactor: 0.1,                    // 10% de jitter
+    }),
+)
+```
+
+### Constant Backoff
+
+```go
+// Retry com delay fixo de 1 segundo, até 5 tentativas
+client, err := clienthttp.New("https://api.example.com",
+    clienthttp.WithRetryStrategy(clienthttp.NewConstantBackoff(5, time.Second)),
+)
+```
+
+### Retry Por Requisição
+
+```go
+// Cliente sem retry padrão
+client, err := clienthttp.New("https://api.example.com")
+
+// Adicionar retry apenas para requisições específicas
+resp, err := client.Get(ctx, "/critical-endpoint",
+    clienthttp.WithRequestRetryStrategy(clienthttp.NewExponentialBackoff()),
+)
+
+// Desabilitar retry para uma requisição específica (quando cliente tem retry padrão)
+resp, err := client.Post(ctx, "/idempotent", body,
+    clienthttp.WithNoRetry(),
+)
+```
+
+### Estratégia Customizada
+
+```go
+// Estratégia que também faz retry em 500 Internal Server Error
+customStrategy := &clienthttp.ExponentialBackoff{
+    MaxAttempts:  3,
+    InitialDelay: 100 * time.Millisecond,
+    MaxDelay:     5 * time.Second,
+    Multiplier:   2.0,
+    RetryableFunc: func(resp *clienthttp.Response, err error) bool {
+        // Retry em erros de rede
+        if err != nil {
+            return true
+        }
+        // Também retry em 500
+        if resp != nil && resp.StatusCode == 500 {
+            return true
+        }
+        // Status padrão (429, 502, 503, 504)
+        if resp != nil {
+            switch resp.StatusCode {
+            case 429, 502, 503, 504:
+                return true
+            }
+        }
+        return false
+    },
+}
+
+client, err := clienthttp.New("https://api.example.com",
+    clienthttp.WithRetryStrategy(customStrategy),
+)
+```
+
+### Implementar Interface RetryStrategy
+
+```go
+type RetryStrategy interface {
+    ShouldRetry(attempt int, resp *Response, err error) bool
+    NextDelay(attempt int) time.Duration
+}
+
+// Exemplo: Circuit Breaker simples
+type CircuitBreakerRetry struct {
+    MaxAttempts int
+    Delay       time.Duration
+}
+
+func (c *CircuitBreakerRetry) ShouldRetry(attempt int, resp *Response, err error) bool {
+    return attempt < c.MaxAttempts && (err != nil || resp.StatusCode >= 500)
+}
+
+func (c *CircuitBreakerRetry) NextDelay(attempt int) time.Duration {
+    return c.Delay
+}
+```
+
 ## Correlation ID
 
 Configure uma função para extrair ou gerar correlation IDs:
@@ -225,6 +333,7 @@ client, err := clienthttp.New("https://api.example.com",
 | `WithAuthCallback(fn)` | Callback para autenticação | nil |
 | `WithContentType(ct)` | Content-Type padrão | application/json |
 | `WithCookies(cookies...)` | Cookies padrão | - |
+| `WithRetryStrategy(strategy)` | Estratégia de retry | nil |
 
 ### Request Options
 
@@ -236,6 +345,8 @@ client, err := clienthttp.New("https://api.example.com",
 | `WithHeaders(map)` | Adiciona múltiplos headers |
 | `WithBearerToken(token)` | Adiciona Bearer token |
 | `WithBasicAuth(user, pass)` | Adiciona Basic Auth |
+| `WithRequestRetryStrategy(strategy)` | Override retry por request |
+| `WithNoRetry()` | Desabilita retry para request |
 
 ## Tratamento de Erros
 
@@ -269,6 +380,7 @@ if err != nil {
 | `ErrInvalidURL` | URL base inválida |
 | `ErrRequestFailed` | Requisição retornou status não-2xx |
 | `ErrTimeout` | Requisição excedeu timeout |
+| `ErrMaxRetriesExceeded` | Todas as tentativas de retry esgotadas |
 
 ## API Pública
 
@@ -280,6 +392,10 @@ if err != nil {
 - `AuditRequest` - Dados da requisição para auditoria
 - `AuditResponse` - Dados da resposta para auditoria
 - `Error` - Erro estruturado com contexto
+- `RetryStrategy` - Interface para estratégias de retry
+- `ExponentialBackoff` - Retry com backoff exponencial
+- `ConstantBackoff` - Retry com delay constante
+- `NoRetry` - Estratégia que nunca faz retry
 
 ### Métodos do Client
 
@@ -303,6 +419,9 @@ Veja a pasta `example/` para exemplos completos:
 ```bash
 # Executar exemplo básico
 go run ./example/
+
+# Executar exemplo de retry
+go run ./example/retriable/
 
 # Executar exemplo TLS/mTLS
 cd example/tls

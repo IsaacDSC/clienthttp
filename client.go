@@ -69,9 +69,63 @@ func (c *Client) Delete(ctx context.Context, endpoint string, opts ...RequestOpt
 }
 
 // Do performs an HTTP request with the given method.
+// If a RetryStrategy is configured, it will automatically retry failed requests.
 func (c *Client) Do(ctx context.Context, method, endpoint string, body []byte, opts ...RequestOption) (*Response, error) {
 	rc := newRequestConfig(opts...)
 
+	// Determine which retry strategy to use (per-request overrides client-level)
+	strategy := c.config.retryStrategy
+	if rc.retryStrategy != nil {
+		strategy = rc.retryStrategy
+	}
+
+	// If no retry strategy, execute request directly
+	if strategy == nil {
+		return c.doRequest(ctx, method, endpoint, body, rc)
+	}
+
+	// Execute with retry logic
+	var lastResp *Response
+	var lastErr error
+
+	for attempt := 0; ; attempt++ {
+		// Check for context cancellation before each attempt
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		// Execute the request
+		resp, err := c.doRequest(ctx, method, endpoint, body, rc)
+
+		// Success case: no error and response is OK
+		if err == nil && resp.OK() {
+			return resp, nil
+		}
+
+		lastResp = resp
+		lastErr = err
+
+		// Check if we should retry
+		if !strategy.ShouldRetry(attempt, resp, err) {
+			break
+		}
+
+		// Calculate delay and wait
+		delay := strategy.NextDelay(attempt)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+
+	return lastResp, lastErr
+}
+
+// doRequest performs a single HTTP request without retry logic.
+func (c *Client) doRequest(ctx context.Context, method, endpoint string, body []byte, rc *requestConfig) (*Response, error) {
 	endpoint = normalizeEndpoint(endpoint)
 	reqURL := fmt.Sprintf("%s/%s", c.baseURL, endpoint)
 
