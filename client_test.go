@@ -522,4 +522,3 @@ func TestClient_PostForm(t *testing.T) {
 		t.Fatalf("PostForm failed: %v", err)
 	}
 }
-

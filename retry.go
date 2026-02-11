@@ -215,11 +215,7 @@ func isRetryableError(err error) bool {
 
 	// Check for connection refused, reset, etc.
 	var opErr *net.OpError
-	if errors.As(err, &opErr) {
-		return true
-	}
-
-	return false
+	return errors.As(err, &opErr)
 }
 
 // isRetryableStatus checks if an HTTP status code indicates a retryable condition.
