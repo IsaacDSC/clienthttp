@@ -1,4 +1,4 @@
-module clienthttp
+module github.com/IsaacDSC/clienthttp
 
 go 1.24
 

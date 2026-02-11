@@ -1,7 +1,6 @@
 package main
 
 import (
-	"clienthttp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +9,8 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"time"
+
+	"github.com/IsaacDSC/clienthttp"
 )
 
 func main() {

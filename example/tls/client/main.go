@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"clienthttp"
+	"github.com/IsaacDSC/clienthttp"
 )
 
 func main() {

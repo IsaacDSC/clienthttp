@@ -1,13 +1,14 @@
 package main
 
 import (
-	"clienthttp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"time"
+
+	"github.com/IsaacDSC/clienthttp"
 
 	"github.com/google/uuid"
 )

@@ -1,12 +1,13 @@
 package main
 
 import (
-	"clienthttp"
 	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/IsaacDSC/clienthttp"
 )
 
 type AuditoryService struct{}
