@@ -7,8 +7,8 @@ GOTEST=$(GOCMD) test
 GOMOD=$(GOCMD) mod
 
 # Tools
-GOPATH_BIN=$(shell $(GOCMD) env GOPATH)/bin
-GOLANGCI_LINT=$(GOPATH_BIN)/golangci-lint
+GOLANGCI_LINT_VERSION=v1.64.5
+GOLANGCI_LINT=go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 # Build output directory
 BUILD_DIR=bin
@@ -16,12 +16,11 @@ BUILD_DIR=bin
 # Example packages
 EXAMPLES=./example ./example/retriable ./example/tls/client ./example/tls/server
 
-## install-tools: Install development tools (golangci-lint)
+## install-tools: Pre-cache golangci-lint module
 install-tools:
-	@echo "Installing golangci-lint..."
-	@test -f $(GOLANGCI_LINT) || \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH_BIN) v1.62.2
-	@echo "Tools installed successfully"
+	@echo "Pre-caching golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	@$(GOLANGCI_LINT) version
+	@echo "Tools ready"
 
 ## lint: Run golangci-lint
 lint:

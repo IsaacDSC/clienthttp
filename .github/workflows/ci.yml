@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.21', '1.22']
+        go-version: ['1.24', '1.25', '1.26']
       fail-fast: false
 
     steps:
@@ -25,12 +25,8 @@ jobs:
           go-version: ${{ matrix.go-version }}
           cache: true
 
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.62.2
-          args: --timeout=3m
-          skip-cache: false
+      - name: Lint
+        run: make lint
 
       - name: Build
         run: make build
