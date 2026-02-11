@@ -160,7 +160,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body []
 	if err != nil {
 		return nil, newError(method, reqURL, 0, nil, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -217,7 +217,7 @@ func (c *Client) PostForm(ctx context.Context, endpoint string, data map[string]
 	if err != nil {
 		return nil, newError(http.MethodPost, reqURL, 0, nil, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

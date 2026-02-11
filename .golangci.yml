@@ -1,0 +1,32 @@
+run:
+  timeout: 3m
+  go: "1.21"
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - gofmt
+    - goimports
+
+linters-settings:
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: clienthttp
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - example
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
