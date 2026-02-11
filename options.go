@@ -34,6 +34,9 @@ type config struct {
 
 	// TLS configuration
 	tls tlsConfig
+
+	// Retry configuration
+	retryStrategy RetryStrategy
 }
 
 // transportConfig holds connection pool configuration options.
@@ -327,8 +330,9 @@ func WithCookies(cookies ...http.Cookie) Option {
 
 // requestConfig holds per-request configuration.
 type requestConfig struct {
-	headers     map[string]string
-	queryParams map[string]string
+	headers       map[string]string
+	queryParams   map[string]string
+	retryStrategy RetryStrategy
 }
 
 // RequestOption configures a single HTTP request.
@@ -390,5 +394,46 @@ func WithBasicAuth(username, password string) RequestOption {
 func WithBearerToken(token string) RequestOption {
 	return func(rc *requestConfig) {
 		rc.headers["Authorization"] = "Bearer " + token
+	}
+}
+
+// ============================================================================
+// Retry Options
+// ============================================================================
+
+// WithRetryStrategy sets the retry strategy for the client.
+// All requests made with this client will use the provided strategy.
+// Use WithRequestRetryStrategy to override for specific requests.
+//
+// Example:
+//
+//	client, _ := clienthttp.New("https://api.example.com",
+//	    clienthttp.WithRetryStrategy(clienthttp.NewExponentialBackoff()),
+//	)
+func WithRetryStrategy(strategy RetryStrategy) Option {
+	return func(c *config) {
+		c.retryStrategy = strategy
+	}
+}
+
+// WithRequestRetryStrategy sets the retry strategy for a specific request,
+// overriding the client-level strategy.
+//
+// Example:
+//
+//	resp, err := client.Get(ctx, "/api/data",
+//	    clienthttp.WithRequestRetryStrategy(clienthttp.NewConstantBackoff(5, time.Second)),
+//	)
+func WithRequestRetryStrategy(strategy RetryStrategy) RequestOption {
+	return func(rc *requestConfig) {
+		rc.retryStrategy = strategy
+	}
+}
+
+// WithNoRetry disables retry for a specific request.
+// This is a convenience function equivalent to WithRequestRetryStrategy(&NoRetry{}).
+func WithNoRetry() RequestOption {
+	return func(rc *requestConfig) {
+		rc.retryStrategy = &NoRetry{}
 	}
 }
