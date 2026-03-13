@@ -1,4 +1,4 @@
-.PHONY: lint build test ci install-tools clean
+.PHONY: lint build test ci install-tools clean security
 
 # Go parameters
 GOCMD=go
@@ -46,7 +46,7 @@ test:
 	$(GOTEST) -v -race ./...
 
 ## ci: Run lint, build, and test (same as CI pipeline)
-ci: lint build test
+ci: lint build test security clean
 	@echo "CI pipeline completed successfully"
 
 ## tidy: Tidy go modules
@@ -58,6 +58,14 @@ clean:
 	@echo "Cleaning build artifacts..."
 	@rm -rf $(BUILD_DIR)
 	@echo "Clean completed"
+
+# Executar scan de segurança com govulncheck
+security:
+	@echo "Executando scan de segurança com govulncheck..."
+	@$(GOCMD) run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	@echo "Executando scan de segurança com gosec..."
+	@$(GOCMD) run github.com/securego/gosec/v2/cmd/gosec@latest -exclude-generated -severity=high -confidence=high ./...
+	@echo "✅ Security scan passou com sucesso!"
 
 ## help: Show this help message
 help:

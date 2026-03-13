@@ -11,6 +11,11 @@ var (
 	// ErrInvalidURL is returned when the provided base URL is not valid.
 	ErrInvalidURL = errors.New("clienthttp: invalid URL")
 
+	// ErrInvalidPath is returned when the provided request path is not valid.
+	// This typically happens when a full URL is passed instead of a path
+	// relative to the client's base URL.
+	ErrInvalidPath = errors.New("clienthttp: invalid path")
+
 	// ErrTimeout is returned when a request times out.
 	ErrTimeout = errors.New("clienthttp: request timeout")
 

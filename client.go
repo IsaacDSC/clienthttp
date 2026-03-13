@@ -132,8 +132,15 @@ func (c *Client) Do(ctx context.Context, method, endpoint string, body []byte, o
 
 // doRequest performs a single HTTP request without retry logic.
 func (c *Client) doRequest(ctx context.Context, method, endpoint string, body []byte, rc *requestConfig) (*Response, error) {
-	endpoint = normalizeEndpoint(endpoint)
-	reqURL := fmt.Sprintf("%s/%s", c.baseURL, endpoint)
+	path, err := normalizeAndValidatePath(endpoint)
+	if err != nil {
+		return nil, newError(method, c.baseURL, 0, nil, err)
+	}
+
+	reqURL := c.baseURL
+	if path != "" {
+		reqURL = fmt.Sprintf("%s/%s", c.baseURL, path)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, method, reqURL, bytes.NewReader(body))
 	if err != nil {
@@ -197,8 +204,15 @@ func (c *Client) PostForm(ctx context.Context, endpoint string, data map[string]
 		form.Add(k, v)
 	}
 
-	endpoint = normalizeEndpoint(endpoint)
-	reqURL := fmt.Sprintf("%s/%s", c.baseURL, endpoint)
+	path, err := normalizeAndValidatePath(endpoint)
+	if err != nil {
+		return nil, newError(http.MethodPost, c.baseURL, 0, nil, err)
+	}
+
+	reqURL := c.baseURL
+	if path != "" {
+		reqURL = fmt.Sprintf("%s/%s", c.baseURL, path)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -345,4 +359,27 @@ func normalizeEndpoint(endpoint string) string {
 	endpoint = strings.TrimPrefix(endpoint, "/")
 	endpoint = strings.TrimSuffix(endpoint, "?")
 	return endpoint
+}
+
+// normalizeAndValidatePath normalizes a request path and ensures that it is
+// relative to the client's base URL (i.e., not a full URL with scheme/host).
+func normalizeAndValidatePath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", nil
+	}
+
+	// Quick rejection for obvious full URLs
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return "", ErrInvalidPath
+	}
+
+	// Use url.Parse to detect scheme/host even in less obvious cases
+	if u, err := url.Parse(path); err == nil {
+		if u.Scheme != "" || u.Host != "" {
+			return "", ErrInvalidPath
+		}
+	}
+
+	return normalizeEndpoint(path), nil
 }
